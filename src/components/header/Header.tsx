@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
 import SearchInput from "@/components/header/SearchInput";
 import HeaderProfile from "@/components/header/HeaderProfile";
-import { Bell, Menu } from "lucide-react";
+import NotificationBell from "@/components/header/NotificationBell";
+import { Menu } from "lucide-react";
 
 export default function Header() {
   const { user } = useAuthStore();
@@ -28,9 +29,7 @@ export default function Header() {
       {user && (
         <div className="flex items-center gap-8 mr-10">
           <SearchInput />
-          <button className="text-[#333333] hover:text-[#724BFD] transition-colors">
-            <Bell size={22} />
-          </button>
+          <NotificationBell />
           <HeaderProfile user={user} />
         </div>
       )}

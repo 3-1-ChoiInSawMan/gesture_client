@@ -24,10 +24,10 @@ export default function ProfilePage() {
 
   return (
     <div className="w-full min-h-screen bg-white">
-      <div className="w-5xl mx-auto py-10 flex flex-col gap-8">
+      <div className="w-[1024px] mx-auto py-10 flex flex-col gap-8">
         <ProfileCard user={user} />
         <div className="flex gap-6 items-stretch">
-          <div className="flex flex-col gap-5 w-82.5 shrink-0">
+          <div className="flex flex-col gap-5 w-[330px] flex-shrink-0">
             <AccountSettings onLogout={logout} />
             <NotificationSettings />
           </div>

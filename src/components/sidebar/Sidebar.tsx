@@ -14,7 +14,7 @@ export default function SideBar() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed left-0 top-0 w-18 h-screen flex flex-col items-center pt-15.5 bg-white z-10">
+    <div className="fixed left-0 top-0 w-18 h-screen flex flex-col items-center pt-11 bg-white z-10">
       <div className="flex flex-col items-center gap-8 mt-8">
         {menus.map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}>

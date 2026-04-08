@@ -63,7 +63,7 @@ export default function Step3Profile({ formData, updateFormData }: Props) {
   };
 
   return (
-    <div className="w-full flex flex-col items-center mt-14.25 gap-6">
+    <div className="w-full flex flex-col items-center mt-14.25 gap-6 pb-20">
       <h2 className="text-[28px] font-bold text-[#333333] text-center">
         프로필 설정
       </h2>

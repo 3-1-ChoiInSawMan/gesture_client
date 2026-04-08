@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { DefaultProfile } from "@/assets";
 import { User } from "@/store/authStore";
 
@@ -9,6 +10,8 @@ interface Props {
 }
 
 export default function ProfileCard({ user }: Props) {
+  const router = useRouter();
+
   return (
     <div className="w-full bg-[#F0EEFF] rounded-[20px] px-10 py-8 flex items-center justify-between relative">
       <div className="flex items-center gap-7">
@@ -30,7 +33,10 @@ export default function ProfileCard({ user }: Props) {
           {user.statusMessage && (
             <p className="text-[15px] text-[#666666]">{user.statusMessage}</p>
           )}
-          <button className="mt-2 w-25 h-9 bg-[#724BFD] rounded-lg text-white text-[14px] font-semibold">
+          <button
+            onClick={() => router.push("/auth/profile/edit")}
+            className="mt-2 w-25 h-9 bg-[#724BFD] rounded-lg text-white text-[14px] font-semibold"
+          >
             프로필 수정
           </button>
         </div>

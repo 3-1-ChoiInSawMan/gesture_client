@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 
 interface LoginData {
   id: string;
@@ -64,6 +64,7 @@ export default function useAuth() {
 
   const logout = () => {
     clearUser();
+    toast.success("로그아웃 되었습니다.");
     router.push("/auth/login");
   };
 

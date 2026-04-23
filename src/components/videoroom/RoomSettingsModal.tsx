@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Pencil, X } from "lucide-react";
 import Image from "next/image";
+import { toast } from "react-toastify";
 
 interface RoomSettingsModalProps {
   roomTitle: string;
@@ -44,7 +45,16 @@ export default function RoomSettingsModal({
   };
 
   const handleSave = () => {
+    if (!roomName.trim()) {
+      toast.error("방 이름을 입력해주세요.");
+      return;
+    }
+    if (isPrivateMode && code.length < 4) {
+      toast.error("비공개 방은 4자리 참여 코드를 입력해주세요.");
+      return;
+    }
     onSave({ roomName, isPrivate: isPrivateMode, code });
+    toast.success("방 설정이 저장되었습니다.");
     onClose();
   };
 

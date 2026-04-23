@@ -1,29 +1,58 @@
 "use client";
 
-import { useRef } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight, MicOff } from "lucide-react";
 import { Participant } from "./types";
+import StreamVideo from "./StreamVideo";
+
+const PAGE_SIZE = 4;
 
 interface ParticipantStripProps {
   participants: Participant[];
   speakingId: string;
+  onSelectParticipant: (id: string) => void;
+  myStream: MediaStream | null;
+  isCameraOn: boolean;
+  screenStream: MediaStream | null;
 }
 
 function ParticipantTile({
   participant,
   isSpeaking,
+  onDoubleClick,
+  myStream,
+  isCameraOn,
+  screenStream,
 }: {
   participant: Participant;
   isSpeaking: boolean;
+  onDoubleClick: () => void;
+  myStream: MediaStream | null;
+  isCameraOn: boolean;
+  screenStream: MediaStream | null;
 }) {
+  const showMyCamera = participant.id === "me" && isCameraOn && myStream;
+  const showScreenShare = participant.id === "screen-share" && screenStream;
+
   return (
     <div
-      className={`relative shrink-0 w-[152px] h-[86px] rounded-[8px] overflow-hidden bg-[#2a2a2a] ${
+      onDoubleClick={onDoubleClick}
+      className={`relative shrink-0 w-[260px] h-[142px] rounded-[8px] overflow-hidden bg-[#2a2a2a] cursor-pointer ${
         isSpeaking ? "ring-2 ring-[#4CAF50]" : ""
       }`}
     >
-      {/* 비디오 목업 배경 */}
-      {participant.isCameraOff ? (
+      {showScreenShare ? (
+        <StreamVideo
+          stream={screenStream}
+          className="w-full h-full object-contain bg-black"
+        />
+      ) : showMyCamera ? (
+        <StreamVideo
+          stream={myStream}
+          mirrored
+          className="w-full h-full object-cover"
+        />
+      ) : participant.isCameraOff ? (
         <div className="w-full h-full flex items-center justify-center bg-[#3a3a3a]">
           <div className="w-10 h-10 rounded-full bg-[#555] flex items-center justify-center text-white text-[16px] font-semibold">
             {participant.name[0]}
@@ -44,15 +73,14 @@ function ParticipantTile({
         </div>
       )}
 
-      {/* 이름 + 뮤트 아이콘 */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1 flex items-center gap-1 bg-gradient-to-t from-black/60 to-transparent">
         {participant.isMuted && (
           <MicOff size={10} className="text-[#FF4444] shrink-0" />
         )}
         <span className="text-white text-[11px] font-medium truncate">
           {participant.name}
-          {participant.role && (
-            <span className="text-[#AAAAAA] ml-1">({participant.role})</span>
+          {participant.isHost && (
+            <span className="text-[#AAAAAA] ml-1">(방장)</span>
           )}
         </span>
       </div>
@@ -63,50 +91,68 @@ function ParticipantTile({
 export default function ParticipantStrip({
   participants,
   speakingId,
+  onSelectParticipant,
+  myStream,
+  isCameraOn,
+  screenStream,
 }: ParticipantStripProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const scrollLeft = () => {
-    scrollRef.current?.scrollBy({ left: -320, behavior: "smooth" });
-  };
-
-  const scrollRight = () => {
-    scrollRef.current?.scrollBy({ left: 320, behavior: "smooth" });
-  };
+  const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(participants.length / PAGE_SIZE);
+  const paged = participants.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const hasPrev = page > 0;
+  const hasNext = page < totalPages - 1;
 
   return (
-    <div className="relative flex items-center bg-black px-10 py-2 gap-2">
-      {/* 왼쪽 화살표 */}
+    <div className="flex items-center justify-center bg-black px-4 pt-3 pb-0 gap-2">
       <button
-        onClick={scrollLeft}
-        className="absolute left-2 z-10 w-7 h-7 flex items-center justify-center text-white hover:text-gray-300 transition-colors"
+        onClick={() => setPage((p) => p - 1)}
+        disabled={!hasPrev}
+        className="w-7 h-7 flex items-center justify-center text-white disabled:opacity-20 hover:text-gray-300 transition-colors shrink-0"
         aria-label="이전 참여자"
       >
         <ChevronLeft size={20} />
       </button>
 
-      {/* 참여자 타일 목록 */}
-      <div
-        ref={scrollRef}
-        className="flex gap-2 overflow-hidden scroll-smooth mx-4"
-      >
-        {participants.map((p) => (
+      <div className="flex items-center gap-2">
+        {paged.map((p) => (
           <ParticipantTile
             key={p.id}
             participant={p}
             isSpeaking={p.id === speakingId}
+            onDoubleClick={() => onSelectParticipant(p.id)}
+            myStream={myStream}
+            isCameraOn={isCameraOn}
+            screenStream={screenStream}
           />
+        ))}
+        {Array.from({ length: PAGE_SIZE - paged.length }).map((_, i) => (
+          <div key={`empty-${i}`} className="shrink-0 w-[260px] h-[142px]" />
         ))}
       </div>
 
-      {/* 오른쪽 화살표 */}
       <button
-        onClick={scrollRight}
-        className="absolute right-2 z-10 w-7 h-7 flex items-center justify-center text-white hover:text-gray-300 transition-colors"
+        onClick={() => setPage((p) => p + 1)}
+        disabled={!hasNext}
+        className="w-7 h-7 flex items-center justify-center text-white disabled:opacity-20 hover:text-gray-300 transition-colors shrink-0"
         aria-label="다음 참여자"
       >
         <ChevronRight size={20} />
       </button>
+
+      {totalPages > 1 && (
+        <div className="flex gap-1 shrink-0">
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setPage(i)}
+              className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                i === page ? "bg-white" : "bg-white/30"
+              }`}
+              aria-label={`${i + 1}페이지`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

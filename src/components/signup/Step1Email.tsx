@@ -2,7 +2,8 @@
 
 import * as C from "@/components";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { SignupFormData } from "@/app/auth/signup/page";
 
 interface Props {
@@ -16,13 +17,43 @@ type Errors = {
   code?: string;
 };
 
-export default function Step1Email({
-  formData,
-  updateFormData,
-  onNext,
-}: Props) {
+const EXPIRY_SECONDS = 300; // 5분
+const MOCK_CODE = "123456";
+
+export default function Step1Email({ formData, updateFormData, onNext }: Props) {
   const [errors, setErrors] = useState<Errors>({});
   const [isVerified, setIsVerified] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m} : ${s}`;
+  };
+
+  const startTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimeLeft(EXPIRY_SECONDS);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const isValidEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -31,23 +62,19 @@ export default function Step1Email({
     if (name === "code") setIsVerified(false);
   };
 
-  const isValidEmail = (email: string) =>
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
   const handleSendCode = () => {
     if (!formData.email) {
       setErrors((prev) => ({ ...prev, email: "이메일을 입력해주세요." }));
       return;
     }
     if (!isValidEmail(formData.email)) {
-      setErrors((prev) => ({
-        ...prev,
-        email: "알맞은 이메일을 입력해주세요.",
-      }));
+      setErrors((prev) => ({ ...prev, email: "알맞은 이메일을 입력해주세요." }));
       return;
     }
     setErrors((prev) => ({ ...prev, email: undefined }));
-    console.log("인증코드 전송:", formData.email);
+    setIsVerified(false);
+    startTimer();
+    toast.success("인증 코드가 전송되었습니다.");
   };
 
   const handleVerifyCode = () => {
@@ -55,22 +82,19 @@ export default function Step1Email({
       setErrors((prev) => ({ ...prev, code: "인증 코드를 입력해주세요." }));
       return;
     }
+    if (formData.code !== MOCK_CODE) {
+      toast.error("인증 코드가 올바르지 않습니다.");
+      return;
+    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimeLeft(0);
     setErrors((prev) => ({ ...prev, code: undefined }));
     setIsVerified(true);
-    console.log("인증코드 확인:", formData.code);
+    toast.success("인증이 완료되었습니다.");
   };
 
   const handleNext = () => {
-    const newErrors: Errors = {};
-    if (!formData.email) newErrors.email = "이메일을 입력해주세요.";
-    else if (!isValidEmail(formData.email))
-      newErrors.email = "알맞은 이메일을 입력해주세요.";
-    if (!formData.code) newErrors.code = "인증 코드를 입력해주세요.";
-    else if (!isVerified) newErrors.code = "인증 코드를 확인해주세요.";
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+    if (!isVerified) return;
     onNext();
   };
 
@@ -80,10 +104,11 @@ export default function Step1Email({
         label="이메일"
         value={formData.email}
         placeholder="이메일"
-        onchange={handleChange}
+        onChange={handleChange}
         name="email"
         type="email"
         rightButton="send"
+        rightButtonLabel="전송"
         onRightButtonClick={handleSendCode}
         errorMessage={errors.email}
       />
@@ -91,10 +116,12 @@ export default function Step1Email({
         label="인증 코드"
         value={formData.code}
         placeholder="인증 코드를 입력하세요"
-        onchange={handleChange}
+        onChange={handleChange}
         name="code"
         type="text"
+        maxLength={6}
         rightButton="verify"
+        timerLabel={timeLeft > 0 ? formatTime(timeLeft) : undefined}
         onRightButtonClick={handleVerifyCode}
         errorMessage={errors.code}
       />
@@ -102,7 +129,8 @@ export default function Step1Email({
         <button
           type="button"
           onClick={handleNext}
-          className="w-full h-full flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white"
+          disabled={!isVerified}
+          className="w-full h-full flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
         >
           다음
         </button>

@@ -38,6 +38,9 @@ export default function SignUp() {
   const nextStep = () =>
     setStep((prev) => (prev < 3 ? ((prev + 1) as Step) : prev));
 
+  const prevStep = () =>
+    setStep((prev) => (prev > 1 ? ((prev - 1) as Step) : prev));
+
   return (
     <div className="flex justify-center">
       <div className="flex flex-col items-center min-w-121 min-h-154.25">
@@ -52,7 +55,11 @@ export default function SignUp() {
           </div>
         ) : (
           <div className="mt-18.5 w-full flex flex-col items-center">
-            <Step3Profile formData={formData} updateFormData={updateFormData} />
+            <Step3Profile
+              formData={formData}
+              updateFormData={updateFormData}
+              onPrev={prevStep}
+            />
           </div>
         )}
 
@@ -68,6 +75,7 @@ export default function SignUp() {
             formData={formData}
             updateFormData={updateFormData}
             onNext={nextStep}
+            onPrev={prevStep}
           />
         )}
       </div>

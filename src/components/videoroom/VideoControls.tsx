@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Settings,
   Mic,
   MicOff,
   Video,
@@ -27,7 +26,6 @@ interface VideoControlsProps {
   onOpenChat: () => void;
   onOpenMeetingNotes: () => void;
   onOpenParticipants: () => void;
-  onOpenSettings: () => void;
   onEndCall: () => void;
 }
 
@@ -35,33 +33,46 @@ interface ControlButtonProps {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
+  /** 기능이 켜진 상태 (자막, 화면공유, 패널 열림) — 보라색 */
   active?: boolean;
+  /** 장치가 꺼진 상태 (마이크 꺼짐, 카메라 꺼짐) — 빨간색 */
+  off?: boolean;
   danger?: boolean;
 }
 
-function ControlButton({ icon, label, onClick, active, danger }: ControlButtonProps) {
+function ControlButton({ icon, label, onClick, active, off, danger }: ControlButtonProps) {
+  const bgClass = danger
+    ? "bg-[#FF4444] hover:bg-[#e03030]"
+    : off
+    ? "bg-[#FF4444]/20 hover:bg-[#FF4444]/30"
+    : active
+    ? "bg-[#724BFD]/20 hover:bg-[#724BFD]/30"
+    : "hover:bg-white/10";
+
+  const colorClass = danger
+    ? "text-white"
+    : off
+    ? "text-[#FF6B6B]"
+    : active
+    ? "text-[#724BFD]"
+    : "text-white";
+
+  const labelClass = danger
+    ? "text-white"
+    : off
+    ? "text-[#FF6B6B]"
+    : active
+    ? "text-[#724BFD]"
+    : "text-[#CCCCCC]";
+
   return (
     <button
       onClick={onClick}
       title={label}
-      className={`flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] transition-colors group ${
-        danger
-          ? "bg-[#FF4444] hover:bg-[#e03030]"
-          : active
-          ? "bg-white/20"
-          : "hover:bg-white/10"
-      }`}
+      className={`flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] transition-colors ${bgClass}`}
     >
-      <span className={danger ? "text-white" : active ? "text-[#724BFD]" : "text-white"}>
-        {icon}
-      </span>
-      <span
-        className={`text-[10px] font-medium ${
-          danger ? "text-white" : active ? "text-[#724BFD]" : "text-[#CCCCCC]"
-        }`}
-      >
-        {label}
-      </span>
+      <span className={colorClass}>{icon}</span>
+      <span className={`text-[10px] font-medium ${labelClass}`}>{label}</span>
     </button>
   );
 }
@@ -79,33 +90,26 @@ export default function VideoControls({
   onOpenChat,
   onOpenMeetingNotes,
   onOpenParticipants,
-  onOpenSettings,
   onEndCall,
 }: VideoControlsProps) {
   return (
-    <div className="flex items-center justify-between bg-[#1a1a1a] px-6 py-3 border-t border-white/10">
-      {/* 설정 */}
-      <button
-        onClick={onOpenSettings}
-        title="통화방 설정"
-        className="flex items-center justify-center w-10 h-10 rounded-[10px] text-white hover:bg-white/10 transition-colors"
-      >
-        <Settings size={22} />
-      </button>
+    <div className="flex items-center justify-between bg-black/70 px-6 py-3">
+      {/* 왼쪽 스페이서 (설정 아이콘 영역 — VideoRoom에서 absolute로 렌더링) */}
+      <div className="w-10 ml-[39px] shrink-0" />
 
       {/* 중앙 컨트롤 */}
       <div className="flex items-center gap-1">
         <ControlButton
           icon={isMicOn ? <Mic size={22} /> : <MicOff size={22} />}
-          label={isMicOn ? "마이크" : "마이크 꺼짐"}
+          label="마이크"
           onClick={onToggleMic}
-          active={!isMicOn}
+          off={!isMicOn}
         />
         <ControlButton
           icon={isCameraOn ? <Video size={22} /> : <VideoOff size={22} />}
-          label={isCameraOn ? "카메라" : "카메라 꺼짐"}
+          label="카메라"
           onClick={onToggleCamera}
-          active={!isCameraOn}
+          off={!isCameraOn}
         />
         <ControlButton
           icon={<Monitor size={22} />}

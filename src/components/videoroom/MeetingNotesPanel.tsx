@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { toast } from "react-toastify";
 
 interface MeetingNotesPanelProps {
   isHost: boolean;
@@ -88,7 +89,16 @@ export default function MeetingNotesPanel({
 
       {/* 저장 버튼 */}
       <div className="px-4 py-3 border-t border-[#E6E9EE]">
-        <button className="w-full h-[38px] bg-[#724BFD] text-white text-[13px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors">
+        <button
+          onClick={() => {
+            if (!notes.title.trim()) {
+              toast.error("회의 제목을 입력해주세요.");
+              return;
+            }
+            toast.success("회의록이 저장되었습니다.");
+          }}
+          className="w-full h-[38px] bg-[#724BFD] text-white text-[13px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors"
+        >
           저장
         </button>
       </div>

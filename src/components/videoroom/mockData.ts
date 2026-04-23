@@ -1,13 +1,31 @@
 import { Participant, ChatMessage } from "./types";
 
+export const MOCK_SUBTITLE =
+  "이현무산학교사칭변지우박지우원제수영어부지리코디위엄도라지팔";
+
+export const SCREEN_SHARE_PARTICIPANT: Participant = {
+  id: "screen-share",
+  name: "화면 공유",
+  username: "screen-share",
+};
+
 export const MOCK_PARTICIPANTS: Participant[] = [
+  {
+    id: "me",
+    name: "나",
+    username: "me",
+    isHost: false,
+    isMuted: false,
+    isCameraOff: false,
+    isSpeaking: false,
+  },
   {
     id: "1",
     name: "이현우",
     username: "hyunwoo_lee",
     isHost: false,
     isMuted: true,
-    isCameraOff: false,
+    isCameraOff: true,
     isSpeaking: false,
   },
   {
@@ -15,26 +33,25 @@ export const MOCK_PARTICIPANTS: Participant[] = [
     name: "권수영",
     username: "new_im_young",
     isHost: false,
-    isMuted: false,
-    isCameraOff: false,
-    isSpeaking: true,
+    isMuted: true,
+    isCameraOff: true,
+    isSpeaking: false,
   },
   {
     id: "3",
     name: "최인소",
     username: "gaming",
     isHost: true,
-    isMuted: false,
-    isCameraOff: false,
+    isMuted: true,
+    isCameraOff: true,
     isSpeaking: false,
-    role: "부방장",
   },
   {
     id: "4",
     name: "권수영",
     username: "gaming2",
     isHost: false,
-    isMuted: false,
+    isMuted: true,
     isCameraOff: true,
     isSpeaking: false,
   },
@@ -43,8 +60,8 @@ export const MOCK_PARTICIPANTS: Participant[] = [
     name: "김태영",
     username: "pawni",
     isHost: false,
-    isMuted: false,
-    isCameraOff: false,
+    isMuted: true,
+    isCameraOff: true,
     isSpeaking: false,
   },
   {
@@ -53,7 +70,7 @@ export const MOCK_PARTICIPANTS: Participant[] = [
     username: "pawni2",
     isHost: false,
     isMuted: true,
-    isCameraOff: false,
+    isCameraOff: true,
     isSpeaking: false,
   },
   {
@@ -61,8 +78,8 @@ export const MOCK_PARTICIPANTS: Participant[] = [
     name: "권수영",
     username: "pawni3",
     isHost: false,
-    isMuted: false,
-    isCameraOff: false,
+    isMuted: true,
+    isCameraOff: true,
     isSpeaking: false,
   },
 ];

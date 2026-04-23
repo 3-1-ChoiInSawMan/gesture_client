@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, Minus, Plus, X } from "lucide-react";
 import Image from "next/image";
+import { toast } from "react-toastify";
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -220,7 +221,7 @@ export default function CreateRoomModal({
 }: CreateRoomModalProps) {
   // ── 폼 상태 ──────────────────────────────────────────────
   const [roomName, setRoomName] = useState("");
-  const [visibility, setVisibility] = useState<"공개" | "비공개">("비공개");
+  const [visibility, setVisibility] = useState<"공개" | "비공개">("공개");
   const [participationCode, setParticipationCode] = useState("");
   const [roomType, setRoomType] = useState<"일반" | "회의방" | "스터디">(
     "회의방"
@@ -279,6 +280,14 @@ export default function CreateRoomModal({
 
   // ── 제출 핸들러 ──────────────────────────────────────────
   const handleSubmit = () => {
+    if (!roomName.trim()) {
+      toast.error("방 이름을 입력해주세요.");
+      return;
+    }
+    if (visibility === "비공개" && !participationCode.trim()) {
+      toast.error("비공개 방은 참여 코드를 입력해주세요.");
+      return;
+    }
     onSubmit?.({
       roomName,
       visibility,
@@ -286,6 +295,7 @@ export default function CreateRoomModal({
       roomType,
       maxParticipants,
     });
+    toast.success("방이 생성되었습니다.");
     onClose();
   };
 

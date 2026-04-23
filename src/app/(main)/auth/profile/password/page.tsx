@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
 import { useAuthStore } from "@/store/authStore";
 import * as C from "@/components";
 import { Lock } from "lucide-react";
@@ -59,22 +60,15 @@ export default function PasswordChangePage() {
     if (signupData) {
       setSignupData({ ...signupData, password: newPassword });
     }
+    toast.success("비밀번호가 변경되었습니다.");
     router.push("/auth/profile");
   };
 
   return (
     <div className="w-full min-h-screen bg-white flex justify-center items-start">
       <div className="flex flex-col items-center py-30 gap-10">
-        <div className="flex items-center gap-4" style={{ width: "375px" }}>
-          <div
-            className="flex items-center justify-center flex-shrink-0"
-            style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "10px",
-              backgroundColor: "rgba(99, 106, 232, 0.2)",
-            }}
-          >
+        <div className="flex items-center gap-4 w-[375px]">
+          <div className="flex items-center justify-center flex-shrink-0 w-[42px] h-[42px] rounded-[10px] bg-[#636AE8]/20">
             <Lock size={20} color="#724BFD" />
           </div>
           <p className="text-[28px] font-semibold text-[#333333]">
@@ -87,7 +81,7 @@ export default function PasswordChangePage() {
             label="현재 비밀번호"
             value={current}
             placeholder="현재 비밀번호"
-            onchange={handleChange}
+            onChange={handleChange}
             name="current"
             type="password"
             passwordToggle
@@ -97,7 +91,7 @@ export default function PasswordChangePage() {
             label="새 비밀번호"
             value={newPassword}
             placeholder="새 비밀번호"
-            onchange={handleChange}
+            onChange={handleChange}
             name="newPassword"
             type="password"
             passwordToggle
@@ -107,7 +101,7 @@ export default function PasswordChangePage() {
             label="비밀번호 확인"
             value={confirm}
             placeholder="비밀번호 확인"
-            onchange={handleChange}
+            onChange={handleChange}
             name="confirm"
             type="password"
             passwordToggle
@@ -119,16 +113,14 @@ export default function PasswordChangePage() {
           <button
             type="button"
             onClick={() => router.back()}
-            style={{ width: "175px", height: "46px", borderRadius: "10px" }}
-            className="flex justify-center items-center bg-[#F3F4F6] text-[16px] font-semibold text-[#333333]"
+            className="w-[175px] h-[46px] flex justify-center items-center bg-[#F3F4F6] rounded-[10px] text-[16px] font-semibold text-[#333333]"
           >
             이전
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            style={{ width: "175px", height: "46px", borderRadius: "10px" }}
-            className="flex justify-center items-center bg-[#724BFD] text-[16px] font-semibold text-white"
+            className="w-[175px] h-[46px] flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[16px] font-semibold text-white"
           >
             완료
           </button>

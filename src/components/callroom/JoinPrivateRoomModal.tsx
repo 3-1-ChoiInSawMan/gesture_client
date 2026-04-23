@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "react-toastify";
+
+const MOCK_CODE = "1234";
 
 interface JoinPrivateRoomModalProps {
   roomTitle: string;
@@ -42,7 +45,15 @@ export default function JoinPrivateRoomModal({
 
   const handleJoin = () => {
     const code = digits.join("");
-    if (code.length === 4) onJoin(code);
+    if (code.length < 4) {
+      toast.error("4자리를 모두 입력해주세요.");
+      return;
+    }
+    if (code !== MOCK_CODE) {
+      toast.error("잘못된 코드입니다.");
+      return;
+    }
+    onJoin(code);
   };
 
   return (
@@ -65,7 +76,6 @@ export default function JoinPrivateRoomModal({
             {roomTitle}에 참여하시겠습니까?
           </p>
 
-          {/* 4자리 코드 입력 */}
           <div className="flex justify-center gap-3">
             {digits.map((digit, i) => (
               <input
@@ -91,8 +101,7 @@ export default function JoinPrivateRoomModal({
             </button>
             <button
               onClick={handleJoin}
-              disabled={digits.join("").length < 4}
-              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors"
             >
               참여
             </button>

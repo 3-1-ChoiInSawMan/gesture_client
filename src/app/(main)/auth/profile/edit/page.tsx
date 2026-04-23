@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { toast } from "react-toastify";
 import { useAuthStore } from "@/store/authStore";
-import { DefaultProfile } from "@/assets";
 import * as C from "@/components";
+import ProfileImageUploader from "@/components/common/ProfileImageUploader";
 
 type Errors = {
   id?: string;
@@ -63,53 +63,20 @@ export default function ProfileEditPage() {
       profileImage: previewUrl ?? user.profileImage,
     });
 
+    toast.success("프로필이 수정되었습니다.");
     router.push("/auth/profile");
   };
 
   return (
     <div className="w-full min-h-screen bg-white flex justify-center">
       <div className="w-[640px] flex flex-col items-center py-14 gap-6">
-        <div className="flex justify-center">
-          <label htmlFor="profileImage" className="cursor-pointer relative">
-            <div className="w-36 h-36 rounded-full overflow-hidden">
-              <Image
-                src={previewUrl ?? DefaultProfile}
-                alt="프로필"
-                width={144}
-                height={144}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="absolute bottom-0 right-0 w-9 h-9 bg-[#724BFD] rounded-full flex items-center justify-center">
-              <svg
-                width="17"
-                height="17"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
-            </div>
-          </label>
-          <input
-            id="profileImage"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageChange}
-          />
-        </div>
+        <ProfileImageUploader previewUrl={previewUrl} onChange={handleImageChange} />
 
         <C.Input
           label="아이디"
           value={id}
           placeholder="아이디를 입력하세요"
-          onchange={handleChange}
+          onChange={handleChange}
           name="id"
           type="text"
           errorMessage={errors.id}
@@ -119,13 +86,13 @@ export default function ProfileEditPage() {
           label="닉네임"
           value={nickname}
           placeholder="닉네임을 입력하세요"
-          onchange={handleChange}
+          onChange={handleChange}
           name="nickname"
           type="text"
           errorMessage={errors.nickname}
         />
 
-        <div className="flex flex-col w-93.75" style={{ gap: "11px" }}>
+        <div className="flex flex-col w-93.75 gap-[11px]">
           <p className="text-[16px] font-semibold text-[#333333]">
             상태 메시지{" "}
             <span className="text-[#AAAAAA] text-[13px] font-normal">

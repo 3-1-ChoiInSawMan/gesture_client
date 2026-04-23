@@ -1,12 +1,13 @@
-'use client';
-import * as C from '@/components';
-import * as I from '@/assets/index';
-import Link from 'next/link';
-import useAuth from "@/hooks/useAuth";
-import { useState } from 'react';
-import { loginInputFields } from '@/constants/auth';
+"use client";
 
-export default function Login(){
+import * as C from "@/components";
+import * as I from "@/assets/index";
+import Link from "next/link";
+import useAuth from "@/hooks/useAuth";
+import { useState } from "react";
+import { loginInputFields } from "@/constants/auth";
+
+export default function Login() {
   const { login, loading } = useAuth();
   const [formData, setFormData] = useState({
     id: "",
@@ -15,10 +16,10 @@ export default function Login(){
   const [autoLogin, setAutoLogin] = useState(false);
 
   const loginButtonImages = [
-    {image: I.Kakao, alt:"kakao"},
-    {image: I.Naver, alt:"naver"},
-    {image: I.Google, alt:"google"}
-  ]
+    { image: I.Kakao, alt: "kakao" },
+    { image: I.Naver, alt: "naver" },
+    { image: I.Google, alt: "google" },
+  ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -27,10 +28,7 @@ export default function Login(){
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login({
-      ...formData,
-      autoLogin,
-    });
+    login({ ...formData, autoLogin });
   };
 
   return (
@@ -52,7 +50,7 @@ export default function Login(){
               label={i.label}
               value={formData[i.name as keyof typeof formData]}
               placeholder={i.placeholder}
-              onchange={handleChange}
+              onChange={handleChange}
               name={i.name}
               type={i.type}
             />
@@ -61,10 +59,7 @@ export default function Login(){
             <input
               type="checkbox"
               checked={autoLogin}
-              onChange={(e) => {
-                setAutoLogin(e.target.checked);
-                console.log(`자동 로그인: ${e.target.checked ? "on" : "off"}`);
-              }}
+              onChange={(e) => setAutoLogin(e.target.checked)}
             />
             <p className="text-[12px] text-[#333333]">자동 로그인</p>
           </div>

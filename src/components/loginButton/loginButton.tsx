@@ -1,12 +1,12 @@
-import Image, { StaticImageData } from 'next/image';
+import Image, { StaticImageData } from "next/image";
 
-interface loginButtonProps{
+interface LoginButtonProps {
   image: StaticImageData;
-  alt: string; 
+  alt: string;
   border?: boolean;
 }
 
-export default function loginButton({image, alt, border=false}: loginButtonProps){
+export default function LoginButton({ image, alt, border = false }: LoginButtonProps) {
   return (
     <div className="w-12 h-12 cursor-pointer">
       <Image

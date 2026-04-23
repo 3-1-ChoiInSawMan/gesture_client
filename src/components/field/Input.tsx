@@ -6,13 +6,18 @@ interface InputProps {
   label: string;
   value?: string;
   placeholder: string;
-  onchange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   name: string;
   type: string;
   rightButton?: "send" | "verify" | false;
+  rightButtonLabel?: string;
+  rightButtonDisabled?: boolean;
+  timerLabel?: string;
   onRightButtonClick?: () => void;
   passwordToggle?: boolean;
   errorMessage?: string;
+  disabled?: boolean;
+  maxLength?: number;
 }
 
 export default function Input({
@@ -20,26 +25,21 @@ export default function Input({
   value = "",
   placeholder,
   type = "text",
-  onchange,
+  onChange,
   name,
   rightButton = false,
+  rightButtonLabel,
+  rightButtonDisabled = false,
+  timerLabel,
   onRightButtonClick,
   passwordToggle = false,
   errorMessage,
+  disabled = false,
+  maxLength,
 }: InputProps) {
-  const [inputValue, setInputValue] = useState(value);
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-    onchange(e);
-  };
-
-  const resolvedType = passwordToggle
-    ? showPassword
-      ? "text"
-      : "password"
-    : type;
+  const resolvedType = passwordToggle ? (showPassword ? "text" : "password") : type;
 
   return (
     <div className="flex flex-col w-93.75" style={{ gap: "11px" }}>
@@ -49,13 +49,20 @@ export default function Input({
           className={`${rightButton ? "w-74" : "w-93.75"} h-11.5 flex items-center border ${errorMessage ? "border-red-500" : "border-[#333333]"} rounded-[10px] overflow-hidden`}
         >
           <input
-            className="ml-5 flex-1 min-h-4.5 text-[15px] bg-transparent outline-none pr-4"
-            value={inputValue}
+            className="ml-5 flex-1 min-h-4.5 text-[15px] bg-transparent outline-none disabled:text-[#AAAAAA] disabled:cursor-not-allowed"
+            value={value}
             type={resolvedType}
             placeholder={placeholder}
-            onChange={handleChange}
+            onChange={onChange}
             name={name}
+            disabled={disabled}
+            maxLength={maxLength}
           />
+          {timerLabel && (
+            <span className="mr-3 text-[13px] font-medium text-[#724BFD] whitespace-nowrap shrink-0">
+              {timerLabel}
+            </span>
+          )}
           {passwordToggle && (
             <button
               type="button"
@@ -99,16 +106,18 @@ export default function Input({
           <button
             type="button"
             onClick={onRightButtonClick}
-            className="ml-2.25 h-11.5 w-17.5 flex justify-center items-center rounded-[5px] bg-[#724BFD] text-white text-[14px] font-medium whitespace-nowrap"
+            disabled={rightButtonDisabled}
+            className="ml-2.25 h-11.5 w-17.5 flex justify-center items-center rounded-[5px] bg-[#724BFD] text-white text-[14px] font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            전송
+            {rightButtonLabel ?? "전송"}
           </button>
         )}
         {rightButton === "verify" && (
           <button
             type="button"
             onClick={onRightButtonClick}
-            className="ml-2.25 h-11.5 w-17.5 flex justify-center items-center rounded-[5px] bg-white border border-[#724BFD] text-[#724BFD] text-[14px] font-medium whitespace-nowrap"
+            disabled={rightButtonDisabled}
+            className="ml-2.25 h-11.5 w-17.5 flex justify-center items-center rounded-[5px] bg-white border border-[#724BFD] text-[#724BFD] text-[14px] font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
             확인
           </button>

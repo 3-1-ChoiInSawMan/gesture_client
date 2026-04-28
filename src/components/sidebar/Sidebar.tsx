@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Video, Users } from "lucide-react";
+import { Home, Video, Users, BookOpen } from "lucide-react";
 
 const menus = [
   { href: "/", icon: Home, label: "홈" },
   { href: "/call", icon: Video, label: "통화" },
   { href: "/friends", icon: Users, label: "친구" },
+  { href: "/learn", icon: BookOpen, label: "학습" },
 ];
 
 export default function SideBar() {

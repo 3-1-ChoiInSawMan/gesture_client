@@ -8,10 +8,9 @@ import ChatRoomItem from "./ChatRoomItem";
 interface Props {
   onAddFriend: () => void;
   onCreateRoom: () => void;
-  isConnected?: boolean;
 }
 
-export default function ChatSidebar({ onAddFriend, onCreateRoom, isConnected }: Props) {
+export default function ChatSidebar({ onAddFriend, onCreateRoom }: Props) {
   const { rooms, selectedRoomId, selectRoom } = useChatStore();
   const [search, setSearch] = useState("");
 
@@ -27,10 +26,6 @@ export default function ChatSidebar({ onAddFriend, onCreateRoom, isConnected }: 
         onAddFriend={onAddFriend}
         onCreateRoom={onCreateRoom}
       />
-      <div className="px-4 py-1.5 flex items-center gap-1.5">
-        <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-green-400" : "bg-gray-300"}`} />
-        <span className="text-[11px] text-[#AAAAAA]">{isConnected ? "서버 연결됨" : "연결 중..."}</span>
-      </div>
       <div className="flex-1 overflow-y-auto">
         {filtered.map((room) => (
           <ChatRoomItem

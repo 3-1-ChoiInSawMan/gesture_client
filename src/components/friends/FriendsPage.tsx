@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useChatStore } from "@/store/chatStore";
-import { useSocketChat } from "@/hooks/useSocketChat";
 import ChatSidebar from "./sidebar/ChatSidebar";
 import ChatWindow from "./chat/ChatWindow";
 import EmptyChatView from "./EmptyChatView";
@@ -12,7 +11,6 @@ import CreateChatRoomModal from "./modals/CreateChatRoomModal";
 
 export default function FriendsPage() {
   const { selectedRoomId } = useChatStore();
-  const { isConnected } = useSocketChat();
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -22,7 +20,6 @@ export default function FriendsPage() {
       <ChatSidebar
         onAddFriend={() => setShowAddFriend(true)}
         onCreateRoom={() => setShowCreateRoom(true)}
-        isConnected={isConnected}
       />
 
       {selectedRoomId ? (

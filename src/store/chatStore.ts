@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { ChatRoom, Message } from "@/components/friends/types";
 import { MOCK_ROOMS, MOCK_MESSAGES } from "@/components/friends/mockData";
-import { chatSocket } from "@/lib/socket";
 
 interface ChatStore {
   rooms: ChatRoom[];
@@ -10,7 +9,6 @@ interface ChatStore {
 
   selectRoom: (roomId: string | null) => void;
   sendMessage: (roomId: string, content: string, senderId: string, senderName: string) => void;
-  receiveMessage: (message: Message) => void;
   createRoom: (name: string, memberIds: string[], memberNames?: string[], avatarUrl?: string) => void;
 }
 
@@ -39,29 +37,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       messages: { ...state.messages, [roomId]: [...prev, newMsg] },
       rooms: state.rooms.map((r) =>
         r.id === roomId ? { ...r, lastMessage: content, lastMessageTime: `오후 ${time}` } : r
-      ),
-    }));
-    chatSocket.send({
-      type: "message",
-      id: newMsg.id,
-      roomId,
-      senderId,
-      senderName,
-      senderUsername: senderId,
-      content,
-      time,
-    });
-  },
-
-  receiveMessage: (message) => {
-    const prev = get().messages[message.roomId] ?? [];
-    if (prev.some((m) => m.id === message.id)) return;
-    set((state) => ({
-      messages: { ...state.messages, [message.roomId]: [...prev, message] },
-      rooms: state.rooms.map((r) =>
-        r.id === message.roomId
-          ? { ...r, lastMessage: message.content, lastMessageTime: `오후 ${message.time}` }
-          : r
       ),
     }));
   },

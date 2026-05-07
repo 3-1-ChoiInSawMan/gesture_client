@@ -37,12 +37,6 @@ export default function JoinPrivateRoomModal({
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
   const handleJoin = () => {
     const code = digits.join("");
     if (code.length < 4) {
@@ -54,6 +48,15 @@ export default function JoinPrivateRoomModal({
       return;
     }
     onJoin(code);
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+    if (e.key === "Enter") {
+      handleJoin();
+    }
   };
 
   return (

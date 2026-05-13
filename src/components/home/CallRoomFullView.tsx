@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import CallRoom, { CallRoomData } from "./CallRoom";
-import { MOCK_ROOMS } from "./mockRooms";
 import JoinRoomModal from "@/components/callroom/JoinRoomModal";
 import JoinPrivateRoomModal from "@/components/callroom/JoinPrivateRoomModal";
+import { useCallRoomStore } from "@/store/callRoomStore";
 
 interface Props {
   title: string;
@@ -16,7 +16,12 @@ interface Props {
 
 export default function CallRoomFullView({ title, onClose, username }: Props) {
   const router = useRouter();
+  const { rooms, fetchRooms } = useCallRoomStore();
   const [selectedRoom, setSelectedRoom] = useState<CallRoomData | null>(null);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   const handleJoin = () => {
     if (!selectedRoom) return;
@@ -37,7 +42,7 @@ export default function CallRoomFullView({ title, onClose, username }: Props) {
         </button>
       </div>
       <div className="grid grid-cols-5 gap-4">
-        {MOCK_ROOMS.map((room) => (
+        {rooms.map((room) => (
           <CallRoom key={room.id} room={room} onClick={setSelectedRoom} />
         ))}
       </div>

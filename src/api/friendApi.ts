@@ -9,42 +9,51 @@ export interface Friend {
 }
 
 export interface FriendRequest {
-  requestId: string;
-  fromUserId: string;
-  fromNickname: string;
-  createdAt: string;
+  requestId: number;
+  username: string;
+  userId: string;
+  sentAt: string;
 }
 
 export const friendApi = {
   getFriends: async (): Promise<Friend[]> => {
+    const { data } = await api.get("/api/friend/list");
+    return (data.data ?? []) as Friend[];
+  },
+
+  getRequests: async (): Promise<FriendRequest[]> => {
     const { data } = await api.get("/api/friend");
-    return data.data as Friend[];
+    const body = data.data ?? data;
+    const requests: FriendRequest[] = Object.values(body?.requests ?? body ?? {});
+    return requests;
   },
 
   sendRequest: async (userId: string): Promise<void> => {
-    await api.post("/api/friend", { userId });
+    await api.post("/api/friend", { userid: userId });
   },
 
-  acceptRequest: async (requestId: string): Promise<void> => {
+  acceptRequest: async (requestId: string | number): Promise<void> => {
     await api.post("/api/friend/accept", null, {
       params: { request_id: requestId },
     });
   },
 
-  denyRequest: async (requestId: string): Promise<void> => {
+  denyRequest: async (requestId: string | number): Promise<void> => {
     await api.post("/api/friend/deny", null, {
       params: { request_id: requestId },
     });
   },
 
   deleteFriend: async (userId: string): Promise<void> => {
-    await api.delete("/api/friend", { data: { userId } });
+    await api.delete("/api/friend", {
+      params: { userid: userId },
+    });
   },
 
   inviteFriend: async (
-    userId: string,
-    roomId: string
+    targetUserId: string,
+    targetCallRoom: string
   ): Promise<void> => {
-    await api.post("/api/friend/invite", { userId, roomId });
+    await api.post("/api/friend/invite", { targetUserId, targetCallRoom });
   },
 };

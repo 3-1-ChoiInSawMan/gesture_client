@@ -1,63 +1,79 @@
 import { api } from "./axiosInstance";
 
-export interface CallRoom {
-  id: string;
+export interface ApiCallRoom {
+  roomId: number;
   title: string;
-  category?: string;
-  isPrivate: boolean;
-  currentMembers: number;
-  maxMembers: number;
-  hostId: string;
-  createdAt?: string;
+  thumbnailUrl?: string;
+  host: {
+    userId: number;
+    profileUrl?: string;
+    nickname: string;
+  };
+  currentParticipants: number;
+  startedAt: string;
 }
 
 export interface CreateRoomRequest {
   title: string;
-  category?: string;
-  isPrivate: boolean;
-  password?: string;
-  maxMembers: number;
+  description?: string;
+  maxParticipant: number;
+  isPublic: boolean;
+  thumbnailUrl?: string;
 }
 
-export interface UpdateRoomRequest {
-  title?: string;
-  category?: string;
-  isPrivate?: boolean;
-  password?: string;
-  maxMembers?: number;
+export interface CreateRoomResponse {
+  roomId: number;
+}
+
+export interface EndMinutesSummary {
+  minutesId: number;
+  endedAt: string;
+  summary: {
+    title: string;
+    summary: string;
+    decisions: string[];
+    todos: string[];
+  };
 }
 
 export const callRoomApi = {
-  getRooms: async (keyword?: string): Promise<CallRoom[]> => {
-    const { data } = await api.get("/api/call-rooms", {
-      params: keyword ? { keyword } : undefined,
-    });
-    return data.data as CallRoom[];
+  getRooms: async (params?: {
+    page?: number;
+    size?: number;
+    sort?: string;
+  }): Promise<ApiCallRoom[]> => {
+    const { data } = await api.get("/api/call-rooms", { params });
+    return (data.data ?? data) as ApiCallRoom[];
   },
 
-  getRoom: async (roomId: string): Promise<CallRoom> => {
+  getRoom: async (roomId: string | number): Promise<ApiCallRoom> => {
     const { data } = await api.get(`/api/call-rooms/${roomId}`);
-    return data.data as CallRoom;
+    return data.data as ApiCallRoom;
   },
 
-  createRoom: async (body: CreateRoomRequest): Promise<CallRoom> => {
+  createRoom: async (body: CreateRoomRequest): Promise<CreateRoomResponse> => {
     const { data } = await api.post("/api/call-rooms", body);
-    return data.data as CallRoom;
+    return data.data as CreateRoomResponse;
   },
 
-  joinRoom: async (roomId: string): Promise<void> => {
-    await api.post(`/api/call-rooms/${roomId}/join`);
+  joinRoom: async (
+    roomId: string | number,
+    password?: string
+  ): Promise<void> => {
+    await api.post(
+      `/api/call-rooms/${roomId}/join`,
+      password ? { password } : undefined
+    );
   },
 
   updateRoom: async (
-    roomId: string,
-    body: UpdateRoomRequest
-  ): Promise<CallRoom> => {
-    const { data } = await api.patch(`/api/call-rooms/${roomId}`, body);
-    return data.data as CallRoom;
+    roomId: string | number,
+    body: Partial<CreateRoomRequest>
+  ): Promise<void> => {
+    await api.patch(`/api/call-rooms/${roomId}`, body);
   },
 
-  deleteRoom: async (roomId: string): Promise<void> => {
+  deleteRoom: async (roomId: string | number): Promise<void> => {
     await api.delete(`/api/call-rooms/${roomId}`);
   },
 };

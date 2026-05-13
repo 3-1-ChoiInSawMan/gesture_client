@@ -4,6 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, Minus, Plus, X } from "lucide-react";
 import Image from "next/image";
 import { toast } from "react-toastify";
+import { callRoomApi } from "@/api/callRoomApi";
+import { useCallRoomStore } from "@/store/callRoomStore";
 
 // ────────────────────────────────────────────────────────────
 // Types
@@ -219,6 +221,7 @@ export default function CreateRoomModal({
   onClose,
   onSubmit,
 }: CreateRoomModalProps) {
+  const { fetchRooms } = useCallRoomStore();
   // ── 폼 상태 ──────────────────────────────────────────────
   const [roomName, setRoomName] = useState("");
   const [visibility, setVisibility] = useState<"공개" | "비공개">("공개");
@@ -227,6 +230,7 @@ export default function CreateRoomModal({
     "회의방"
   );
   const [maxParticipants, setMaxParticipants] = useState(10);
+  const [submitting, setSubmitting] = useState(false);
 
   // ── 모달 오픈 시 body 스크롤 잠금 ───────────────────────
   useEffect(() => {
@@ -279,7 +283,7 @@ export default function CreateRoomModal({
     setMaxParticipants((prev) => Math.min(100, prev + 1));
 
   // ── 제출 핸들러 ──────────────────────────────────────────
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!roomName.trim()) {
       toast.error("방 이름을 입력해주세요.");
       return;
@@ -288,15 +292,32 @@ export default function CreateRoomModal({
       toast.error("비공개 방은 참여 코드를 입력해주세요.");
       return;
     }
-    onSubmit?.({
-      roomName,
-      visibility,
-      participationCode,
-      roomType,
-      maxParticipants,
-    });
-    toast.success("방이 생성되었습니다.");
-    onClose();
+    setSubmitting(true);
+    try {
+      await callRoomApi.createRoom({
+        title: roomName,
+        maxParticipant: maxParticipants,
+        isPublic: visibility === "공개",
+        description: participationCode || undefined,
+      });
+      onSubmit?.({
+        roomName,
+        visibility,
+        participationCode,
+        roomType,
+        maxParticipants,
+      });
+      toast.success("방이 생성되었습니다.");
+      await fetchRooms();
+      onClose();
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "방 생성에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -411,9 +432,10 @@ export default function CreateRoomModal({
             </button>
             <button
               onClick={handleSubmit}
-              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] tracking-[0.45px] hover:bg-[#5f3de0] transition-colors"
+              disabled={submitting}
+              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] tracking-[0.45px] hover:bg-[#5f3de0] transition-colors disabled:opacity-40"
             >
-              생성
+              {submitting ? "생성 중..." : "생성"}
             </button>
           </div>
 

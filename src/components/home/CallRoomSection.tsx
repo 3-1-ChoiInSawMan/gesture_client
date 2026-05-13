@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 import CallRoom, { CallRoomData } from "./CallRoom";
-import { MOCK_ROOMS } from "./mockRooms";
 import CreateRoomModal from "@/components/callroom/CreateRoomModal";
 import JoinRoomModal from "@/components/callroom/JoinRoomModal";
 import JoinPrivateRoomModal from "@/components/callroom/JoinPrivateRoomModal";
+import { useCallRoomStore } from "@/store/callRoomStore";
 
 const CATEGORIES = ["전체", "일반", "회의방", "스터디"];
 
@@ -27,9 +27,14 @@ export default function CallRoomSection({
   showFilter = false,
 }: Props) {
   const router = useRouter();
+  const { rooms, fetchRooms } = useCallRoomStore();
   const [activeCategory, setActiveCategory] = useState("전체");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<CallRoomData | null>(null);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   const handleRoomClick = (room: CallRoomData) => {
     setSelectedRoom(room);
@@ -41,11 +46,10 @@ export default function CallRoomSection({
     setSelectedRoom(null);
   };
 
-  const cols = showFilter ? 5 : 4;
   const filtered =
     activeCategory === "전체"
-      ? MOCK_ROOMS
-      : MOCK_ROOMS.filter((r) => r.category === activeCategory);
+      ? rooms
+      : rooms.filter((r) => r.category === activeCategory);
 
   const displayed = filtered.slice(0, rows * 5);
 

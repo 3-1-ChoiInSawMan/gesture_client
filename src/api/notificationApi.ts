@@ -1,13 +1,15 @@
 import { api } from "./axiosInstance";
 
-export interface NotificationSettings {
-  [type: string]: boolean;
+export interface NotificationSetting {
+  type: string;
+  enabled: boolean;
 }
 
 export const notificationApi = {
-  getSettings: async (): Promise<NotificationSettings> => {
+  getSettings: async (): Promise<NotificationSetting[]> => {
     const { data } = await api.get("/api/notifications/settings");
-    return data.data as NotificationSettings;
+    const body = data.data ?? data;
+    return (body?.settings ?? []) as NotificationSetting[];
   },
 
   updateSetting: async (type: string, enabled: boolean): Promise<void> => {

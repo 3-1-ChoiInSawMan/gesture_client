@@ -1,28 +1,29 @@
 import { api } from "./axiosInstance";
 
-export interface QuickSlot {
-  id: string;
-  text: string;
-  order: number;
+export interface QuickAction {
+  name: string;
+  mediaUrl: string;
 }
 
-export interface UpdateQuickSlotsRequest {
-  slots: { id?: string; text: string; order: number }[];
+export interface QuickSlot {
+  actionName: string;
+  mediaUrl: string;
 }
 
 export const quickSlotApi = {
-  getAll: async (): Promise<QuickSlot[]> => {
+  getAll: async (): Promise<QuickAction[]> => {
     const { data } = await api.get("/api/quick-slots");
-    return data.data as QuickSlot[];
+    const body = data.data ?? data;
+    return (body?.quickActions ?? []) as QuickAction[];
   },
 
-  getMy: async (): Promise<QuickSlot[]> => {
+  getMy: async (): Promise<(QuickSlot | null)[]> => {
     const { data } = await api.get("/api/quick-slots/me");
-    return data.data as QuickSlot[];
+    const body = data.data ?? data;
+    return (body?.quickSlots ?? []) as (QuickSlot | null)[];
   },
 
-  update: async (body: UpdateQuickSlotsRequest): Promise<QuickSlot[]> => {
-    const { data } = await api.patch("/api/quick-slots", body);
-    return data.data as QuickSlot[];
+  update: async (slots: { name: string; mediaUrl: string }[]): Promise<void> => {
+    await api.patch("/api/quick-slots/me", { slots });
   },
 };

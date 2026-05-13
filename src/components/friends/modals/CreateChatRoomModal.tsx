@@ -5,6 +5,7 @@ import { X, Camera } from "lucide-react";
 import { FriendUser } from "../types";
 import { ALL_USERS } from "../mockData";
 import { useChatStore } from "@/store/chatStore";
+import { chatApi } from "@/api/chatApi";
 import { toast } from "react-toastify";
 
 interface Props {
@@ -49,10 +50,18 @@ export default function CreateChatRoomModal({ onClose }: Props) {
     setAddedFriends((prev) => prev.filter((f) => f.id !== id));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!roomName.trim()) {
       toast.error("방 이름을 입력해주세요.");
       return;
+    }
+    try {
+      await chatApi.createChat({
+        roomName: roomName.trim(),
+        members: addedFriends.map((f) => ({ userId: Number(f.id) })),
+      });
+    } catch {
+      // API not ready yet – fall through to local store
     }
     createRoom(
       roomName.trim(),

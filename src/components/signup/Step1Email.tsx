@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import { SignupFormData } from "@/app/auth/signup/page";
+import { authApi } from "@/api/authApi";
 
 interface Props {
   formData: SignupFormData;
@@ -17,13 +18,14 @@ type Errors = {
   code?: string;
 };
 
-const EXPIRY_SECONDS = 300; // 5분
-const MOCK_CODE = "123456";
+const EXPIRY_SECONDS = 300;
 
 export default function Step1Email({ formData, updateFormData, onNext }: Props) {
   const [errors, setErrors] = useState<Errors>({});
   const [isVerified, setIsVerified] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -62,7 +64,7 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
     if (name === "code") setIsVerified(false);
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!formData.email) {
       setErrors((prev) => ({ ...prev, email: "이메일을 입력해주세요." }));
       return;
@@ -71,26 +73,44 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
       setErrors((prev) => ({ ...prev, email: "알맞은 이메일을 입력해주세요." }));
       return;
     }
-    setErrors((prev) => ({ ...prev, email: undefined }));
-    setIsVerified(false);
-    startTimer();
-    toast.success("인증 코드가 전송되었습니다.");
+    setSending(true);
+    try {
+      await authApi.emailSend(formData.email);
+      setErrors((prev) => ({ ...prev, email: undefined }));
+      setIsVerified(false);
+      startTimer();
+      toast.success("인증 코드가 전송되었습니다.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "인증 코드 전송에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     if (!formData.code) {
       setErrors((prev) => ({ ...prev, code: "인증 코드를 입력해주세요." }));
       return;
     }
-    if (formData.code !== MOCK_CODE) {
-      toast.error("인증 코드가 올바르지 않습니다.");
-      return;
+    setVerifying(true);
+    try {
+      await authApi.emailVerification(formData.code);
+      if (timerRef.current) clearInterval(timerRef.current);
+      setTimeLeft(0);
+      setErrors((prev) => ({ ...prev, code: undefined }));
+      setIsVerified(true);
+      toast.success("인증이 완료되었습니다.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "인증 코드가 올바르지 않습니다.";
+      toast.error(message);
+    } finally {
+      setVerifying(false);
     }
-    if (timerRef.current) clearInterval(timerRef.current);
-    setTimeLeft(0);
-    setErrors((prev) => ({ ...prev, code: undefined }));
-    setIsVerified(true);
-    toast.success("인증이 완료되었습니다.");
   };
 
   const handleNext = () => {
@@ -108,7 +128,7 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
         name="email"
         type="email"
         rightButton="send"
-        rightButtonLabel="전송"
+        rightButtonLabel={sending ? "전송 중..." : "전송"}
         onRightButtonClick={handleSendCode}
         errorMessage={errors.email}
       />
@@ -121,6 +141,7 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
         type="text"
         maxLength={6}
         rightButton="verify"
+        rightButtonLabel={verifying ? "확인 중..." : undefined}
         timerLabel={timeLeft > 0 ? formatTime(timeLeft) : undefined}
         onRightButtonClick={handleVerifyCode}
         errorMessage={errors.code}

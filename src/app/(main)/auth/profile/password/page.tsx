@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { useAuthStore } from "@/store/authStore";
+import { userApi } from "@/api/userApi";
 import * as C from "@/components";
 import { Lock } from "lucide-react";
 
@@ -14,13 +14,13 @@ type Errors = {
 };
 
 export default function PasswordChangePage() {
-  const { signupData, setSignupData } = useAuthStore();
   const router = useRouter();
 
   const [current, setCurrent] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<Errors>({});
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -38,30 +38,35 @@ export default function PasswordChangePage() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const newErrors: Errors = {};
-    if (!current) {
-      newErrors.current = "현재 비밀번호를 입력해주세요.";
-    } else if (signupData?.password && current !== signupData.password) {
-      newErrors.current = "현재 비밀번호가 일치하지 않습니다.";
-    }
-    if (!newPassword) {
-      newErrors.newPassword = "새 비밀번호를 입력해주세요.";
-    }
-    if (!confirm) {
-      newErrors.confirm = "비밀번호 확인을 입력해주세요.";
-    } else if (newPassword !== confirm) {
+    if (!current) newErrors.current = "현재 비밀번호를 입력해주세요.";
+    if (!newPassword) newErrors.newPassword = "새 비밀번호를 입력해주세요.";
+    if (!confirm) newErrors.confirm = "비밀번호 확인을 입력해주세요.";
+    else if (newPassword !== confirm)
       newErrors.confirm = "비밀번호가 일치하지 않습니다.";
-    }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
-    if (signupData) {
-      setSignupData({ ...signupData, password: newPassword });
+
+    setLoading(true);
+    try {
+      await userApi.updatePassword({
+        currentPassword: current,
+        newPassword,
+        newPasswordConfirm: confirm,
+      });
+      toast.success("비밀번호가 변경되었습니다.");
+      router.push("/auth/profile");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "비밀번호 변경에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
-    toast.success("비밀번호가 변경되었습니다.");
-    router.push("/auth/profile");
   };
 
   return (
@@ -71,9 +76,7 @@ export default function PasswordChangePage() {
           <div className="flex items-center justify-center flex-shrink-0 w-[42px] h-[42px] rounded-[10px] bg-[#636AE8]/20">
             <Lock size={20} color="#724BFD" />
           </div>
-          <p className="text-[28px] font-semibold text-[#333333]">
-            비밀번호 변경
-          </p>
+          <p className="text-[28px] font-semibold text-[#333333]">비밀번호 변경</p>
         </div>
 
         <div className="flex flex-col gap-6">
@@ -113,16 +116,18 @@ export default function PasswordChangePage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="w-[175px] h-[46px] flex justify-center items-center bg-[#F3F4F6] rounded-[10px] text-[16px] font-semibold text-[#333333]"
+            disabled={loading}
+            className="w-[175px] h-[46px] flex justify-center items-center bg-[#F3F4F6] rounded-[10px] text-[16px] font-semibold text-[#333333] disabled:opacity-40"
           >
             이전
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            className="w-[175px] h-[46px] flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[16px] font-semibold text-white"
+            disabled={loading}
+            className="w-[175px] h-[46px] flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[16px] font-semibold text-white disabled:opacity-40"
           >
-            완료
+            {loading ? "변경 중..." : "완료"}
           </button>
         </div>
       </div>

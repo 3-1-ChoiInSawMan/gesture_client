@@ -1,0 +1,59 @@
+import { api } from "./axiosInstance";
+import { setCookie } from "@/lib/cookie";
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface TokenResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface RegisterRequest {
+  password: string;
+  passwordConfirm: string;
+  userId: string;
+  nickname: string;
+}
+
+export const authApi = {
+  login: async (body: LoginRequest): Promise<TokenResponse> => {
+    const { data } = await api.post("/api/auth/login", body);
+    const tokens: TokenResponse = data.data;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("accessToken", tokens.accessToken);
+    }
+    setCookie("refreshToken", tokens.refreshToken);
+    return tokens;
+  },
+
+  emailSend: async (email: string): Promise<string> => {
+    const { data } = await api.post("/api/auth/email-send", { email });
+    return data.message as string;
+  },
+
+  emailVerification: async (code: string): Promise<string> => {
+    const { data } = await api.post("/api/auth/email-verification", { code });
+    return data.message as string;
+  },
+
+  register: async (body: RegisterRequest): Promise<void> => {
+    await api.post("/api/auth/register", body);
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post("/api/auth/logout");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("accessToken");
+    }
+    const { deleteCookie } = await import("@/lib/cookie");
+    deleteCookie("refreshToken");
+  },
+
+  recover: async (email: string): Promise<string> => {
+    const { data } = await api.post("/api/auth/recover", { email });
+    return data.message as string;
+  },
+};

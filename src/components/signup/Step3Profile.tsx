@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { SignupFormData } from "@/app/auth/signup/page";
-import { useAuthStore } from "@/store/authStore";
+import { authApi } from "@/api/authApi";
 import ProfileImageUploader from "@/components/common/ProfileImageUploader";
 
 interface Props {
@@ -22,7 +22,7 @@ type Errors = {
 
 export default function Step3Profile({ formData, updateFormData, onPrev }: Props) {
   const [errors, setErrors] = useState<Errors>({});
-  const { setSignupData, signupData: existingSignups } = useAuthStore();
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,31 +36,33 @@ export default function Step3Profile({ formData, updateFormData, onPrev }: Props
     if (file) updateFormData({ profileImage: file });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const newErrors: Errors = {};
-    if (!formData.id) {
-      newErrors.id = "아이디를 입력해주세요.";
-    } else if (existingSignups?.id === formData.id) {
-      newErrors.id = "이미 사용 중인 아이디입니다.";
-    }
-    if (!formData.nickname) {
-      newErrors.nickname = "닉네임을 입력해주세요.";
-    }
+    if (!formData.id) newErrors.id = "아이디를 입력해주세요.";
+    if (!formData.nickname) newErrors.nickname = "닉네임을 입력해주세요.";
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    setSignupData({
-      email: formData.email,
-      password: formData.password,
-      id: formData.id,
-      nickname: formData.nickname,
-      statusMessage: formData.statusMessage,
-    });
-
-    toast.success("회원가입이 완료되었습니다.");
-    router.push("/auth/login");
+    setLoading(true);
+    try {
+      await authApi.register({
+        password: formData.password,
+        passwordConfirm: formData.passwordConfirm,
+        userId: formData.id,
+        nickname: formData.nickname,
+      });
+      toast.success("회원가입이 완료되었습니다.");
+      router.push("/auth/login");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "회원가입에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,7 +72,11 @@ export default function Step3Profile({ formData, updateFormData, onPrev }: Props
       </h2>
 
       <ProfileImageUploader
-        previewUrl={formData.profileImage ? URL.createObjectURL(formData.profileImage) : null}
+        previewUrl={
+          formData.profileImage
+            ? URL.createObjectURL(formData.profileImage)
+            : null
+        }
         onChange={handleImageChange}
       />
 
@@ -111,16 +117,18 @@ export default function Step3Profile({ formData, updateFormData, onPrev }: Props
         <button
           type="button"
           onClick={onPrev}
-          className="flex-1 h-12.5 flex justify-center items-center bg-[#F3F4F6] rounded-[10px] text-[18px] font-semibold text-[#333333]"
+          disabled={loading}
+          className="flex-1 h-12.5 flex justify-center items-center bg-[#F3F4F6] rounded-[10px] text-[18px] font-semibold text-[#333333] disabled:opacity-40"
         >
           이전
         </button>
         <button
           type="button"
           onClick={handleSubmit}
-          className="flex-1 h-12.5 flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white"
+          disabled={loading}
+          className="flex-1 h-12.5 flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white disabled:opacity-40"
         >
-          가입 완료
+          {loading ? "처리 중..." : "가입 완료"}
         </button>
       </div>
       <div className="flex justify-center w-full">

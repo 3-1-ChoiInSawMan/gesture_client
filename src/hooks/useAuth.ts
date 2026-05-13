@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
+import { authApi } from "@/api/authApi";
+import { userApi } from "@/api/userApi";
 
 interface LoginData {
   id: string;
@@ -13,56 +15,41 @@ interface LoginData {
 
 export default function useAuth() {
   const [loading, setLoading] = useState(false);
-  const { setUser, clearUser, signupData } = useAuthStore();
+  const { setUser, clearUser } = useAuthStore();
   const router = useRouter();
 
   const login = async ({ id, password }: LoginData) => {
     setLoading(true);
-
-    const isValid = signupData
-      ? (signupData.id === id || signupData.email === id) &&
-        signupData.password === password
-      : id === "admin" && password === "1234";
-
-    if (isValid) {
-      const userData = signupData
-        ? {
-            id: signupData.id,
-            nickname: signupData.nickname,
-            email: signupData.email,
-            profileImage: undefined,
-            statusMessage: signupData.statusMessage,
-            joinedAt: new Date()
-              .toLocaleDateString("ko-KR", {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-              })
-              .replace(/\.\s*/g, ".")
-              .replace(/\.$/, ""),
-            stats: { totalCalls: 0, friends: 0, rooms: 0 },
-          }
-        : {
-            id: "admin",
-            nickname: "임영웅",
-            email: "imyoung.now@example.com",
-            profileImage: undefined,
-            statusMessage: "나는야 임영웅 할머니들 내가 다 꼬셔",
-            joinedAt: "2026.03.10",
-            stats: { totalCalls: 128, friends: 42, rooms: 8 },
-          };
-
-      setUser(userData);
+    try {
+      await authApi.login({ email: id, password });
+      const profile = await userApi.getMe();
+      setUser({
+        id: profile.userId ?? profile.id,
+        nickname: profile.nickname,
+        email: profile.email,
+        profileImage: profile.profileImage,
+        statusMessage: profile.statusMessage,
+        joinedAt: profile.joinedAt,
+        stats: profile.stats ?? { totalCalls: 0, friends: 0, rooms: 0 },
+      });
       toast.success("로그인 성공");
       router.push("/auth/profile");
-    } else {
-      toast.error("아이디 또는 비밀번호가 틀렸습니다.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "로그인에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // 실패해도 로컬 데이터 정리
+    }
     clearUser();
     toast.success("로그아웃 되었습니다.");
     router.push("/auth/login");

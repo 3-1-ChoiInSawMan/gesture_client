@@ -36,6 +36,13 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    // 에러 콘솔 출력
+    const status = error.response?.status;
+    const url = original?.url ?? "";
+    const method = (original?.method ?? "").toUpperCase();
+    const message = error.response?.data?.message ?? error.message ?? "Unknown error";
+    console.error(`[API ${status ?? "ERR"}] ${method} ${url} →`, message, error.response?.data ?? "");
+
     if (error.response?.status !== 401 || original._retry) {
       return Promise.reject(error);
     }

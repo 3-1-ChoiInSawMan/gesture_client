@@ -29,16 +29,21 @@ export const useCallRoomStore = create<CallRoomStore>((set) => ({
   loading: false,
 
   fetchRooms: async (params) => {
+    // 로그인 상태가 아니면 목데이터만 사용
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    if (!token) {
+      set({ rooms: MOCK_ROOMS });
+      return;
+    }
+
     set({ loading: true });
     try {
       const apiRooms = await callRoomApi.getRooms(params);
       const apiMapped = apiRooms.map(toCallRoomData);
-      // merge: API rooms first, then mock rooms that don't conflict
       const apiIds = new Set(apiMapped.map((r) => r.id));
       const uniqueMock = MOCK_ROOMS.filter((r) => !apiIds.has(r.id));
       set({ rooms: [...apiMapped, ...uniqueMock] });
     } catch {
-      // fall back to mock data on error
       set({ rooms: MOCK_ROOMS });
     } finally {
       set({ loading: false });

@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 import SearchInput from "@/components/header/SearchInput";
 import HeaderProfile from "@/components/header/HeaderProfile";
 import NotificationBell from "@/components/header/NotificationBell";
-import { Menu } from "lucide-react";
+import { Menu, UserCircle } from "lucide-react";
 
 export default function Header() {
   const { user } = useAuthStore();
@@ -26,12 +26,16 @@ export default function Header() {
         </Link>
       </div>
 
-      {user && (
+      {user ? (
         <div className="flex items-center gap-8 mr-10">
           <SearchInput />
           <NotificationBell />
           <HeaderProfile user={user} />
         </div>
+      ) : (
+        <Link href="/auth/login" className="mr-10">
+          <UserCircle size={32} className="text-[#724BFD] hover:text-[#5f3de0] transition-colors cursor-pointer" />
+        </Link>
       )}
     </div>
   );

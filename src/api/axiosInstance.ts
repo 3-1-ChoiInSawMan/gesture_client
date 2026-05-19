@@ -1,8 +1,7 @@
 import axios from "axios";
 import { getCookie, setCookie, deleteCookie } from "@/lib/cookie";
 
-// Next.js rewrites가 /api/* 를 백엔드로 프록시하므로 baseURL은 비워둠
-const BASE_URL = "";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const api = axios.create({
   baseURL: BASE_URL,

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import Step1Email from "@/components/signup/Step1Email";
 import Step2Password from "@/components/signup/Step2Password";
 import Step3Profile from "@/components/signup/Step3Profile";
@@ -18,6 +20,7 @@ export type SignupFormData = {
 type Step = 1 | 2 | 3;
 
 export default function SignUp() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [formData, setFormData] = useState<SignupFormData>({
     email: "",
@@ -41,6 +44,12 @@ export default function SignUp() {
 
   return (
     <div className="flex justify-center">
+      <button
+        onClick={() => step === 1 ? router.push("/") : prevStep()}
+        className="fixed top-5 left-6 flex items-center gap-1 text-[#724BFD] hover:text-[#5f3de0] transition-colors"
+      >
+        <ArrowLeft size={20} />
+      </button>
       <div className="flex flex-col items-center min-w-121 min-h-154.25">
         {step !== 3 ? (
           <div className="flex flex-col items-center mt-36.75">

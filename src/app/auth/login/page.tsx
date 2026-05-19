@@ -3,12 +3,15 @@
 import * as C from "@/components";
 import * as I from "@/assets/index";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useAuth from "@/hooks/useAuth";
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { loginInputFields } from "@/constants/auth";
 
 export default function Login() {
   const { login, loading } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     id: "",
     password: "",
@@ -33,6 +36,12 @@ export default function Login() {
 
   return (
     <div className="flex justify-center pb-17.5">
+      <button
+        onClick={() => router.push("/")}
+        className="fixed top-5 left-6 flex items-center gap-1 text-[#724BFD] hover:text-[#5f3de0] transition-colors"
+      >
+        <ArrowLeft size={20} />
+      </button>
       <div className="flex flex-col items-center min-w-121 min-h-154.25 mt-34.25">
         <div className="flex flex-col justify-between items-center">
           <h1 className="text-[55px] text-[#724BFD] font-extrabold">제스처</h1>

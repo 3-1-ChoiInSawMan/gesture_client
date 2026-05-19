@@ -17,35 +17,35 @@ export interface FriendRequest {
 
 export const friendApi = {
   getFriends: async (): Promise<Friend[]> => {
-    const { data } = await api.get("/api/friend/list");
+    const { data } = await api.get("/friend/list");
     return (data.data ?? []) as Friend[];
   },
 
   getRequests: async (): Promise<FriendRequest[]> => {
-    const { data } = await api.get("/api/friend");
+    const { data } = await api.get("/friend");
     const body = data.data ?? data;
     const requests: FriendRequest[] = Object.values(body?.requests ?? body ?? {});
     return requests;
   },
 
   sendRequest: async (userId: string): Promise<void> => {
-    await api.post("/api/friend", { userid: userId });
+    await api.post("/friend", { userid: userId });
   },
 
   acceptRequest: async (requestId: string | number): Promise<void> => {
-    await api.post("/api/friend/accept", null, {
+    await api.post("/friend/accept", null, {
       params: { request_id: requestId },
     });
   },
 
   denyRequest: async (requestId: string | number): Promise<void> => {
-    await api.post("/api/friend/deny", null, {
+    await api.post("/friend/deny", null, {
       params: { request_id: requestId },
     });
   },
 
   deleteFriend: async (userId: string): Promise<void> => {
-    await api.delete("/api/friend", {
+    await api.delete("/friend", {
       params: { userid: userId },
     });
   },
@@ -54,6 +54,6 @@ export const friendApi = {
     targetUserId: string,
     targetCallRoom: string
   ): Promise<void> => {
-    await api.post("/api/friend/invite", { targetUserId, targetCallRoom });
+    await api.post("/friend/invite", { targetUserId, targetCallRoom });
   },
 };

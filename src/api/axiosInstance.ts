@@ -62,7 +62,7 @@ api.interceptors.response.use(
       const refreshToken = getCookie("refreshToken");
       if (!refreshToken) throw new Error("no refresh token");
 
-      const { data } = await axios.get(`${BASE_URL}/api/auth/refresh`, {
+      const { data } = await axios.get(`${BASE_URL}/auth/refresh`, {
         headers: { Authorization: `Bearer ${refreshToken}` },
       });
 

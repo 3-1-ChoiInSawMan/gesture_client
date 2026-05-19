@@ -7,17 +7,17 @@ export interface NotificationSetting {
 
 export const notificationApi = {
   getSettings: async (): Promise<NotificationSetting[]> => {
-    const { data } = await api.get("/api/notifications/settings");
+    const { data } = await api.get("/notifications/settings");
     const body = data.data ?? data;
     return (body?.settings ?? []) as NotificationSetting[];
   },
 
   updateSetting: async (type: string, enabled: boolean): Promise<void> => {
-    await api.patch(`/api/notifications/settings/${type}`, { enabled });
+    await api.patch(`/notifications/settings/${type}`, { enabled });
   },
 
   send: async (body: Record<string, unknown>): Promise<void> => {
-    await api.post("/api/notifications", body);
+    await api.post("/notifications", body);
   },
 
   subscribe: (): EventSource => {

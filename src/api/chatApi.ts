@@ -11,7 +11,7 @@ export interface CreateChatRequest {
 
 export const chatApi = {
   createChat: async (body: CreateChatRequest): Promise<ChatRoomResponse> => {
-    const { data } = await api.post("/api/chat", body);
+    const { data } = await api.post("/chat", body);
     return (data.data ?? data) as ChatRoomResponse;
   },
 };

@@ -21,7 +21,7 @@ export interface RegisterRequest {
 
 export const authApi = {
   login: async (body: LoginRequest): Promise<TokenResponse> => {
-    const { data } = await api.post("/api/auth/login", body);
+    const { data } = await api.post("/auth/login", body);
     const tokens: TokenResponse = data.data;
     if (typeof window !== "undefined") {
       localStorage.setItem("accessToken", tokens.accessToken);
@@ -31,21 +31,21 @@ export const authApi = {
   },
 
   emailSend: async (email: string): Promise<string> => {
-    const { data } = await api.post("/api/auth/email-send", { email });
+    const { data } = await api.post("/auth/email-send", { email });
     return data.message as string;
   },
 
   emailVerification: async (code: string): Promise<string> => {
-    const { data } = await api.post("/api/auth/email-verification", { code });
+    const { data } = await api.post("/auth/email-verification", { code });
     return data.message as string;
   },
 
   register: async (body: RegisterRequest): Promise<void> => {
-    await api.post("/api/auth/register", body);
+    await api.post("/auth/register", body);
   },
 
   logout: async (): Promise<void> => {
-    await api.post("/api/auth/logout");
+    await api.post("/auth/logout");
     if (typeof window !== "undefined") {
       localStorage.removeItem("accessToken");
     }
@@ -54,7 +54,7 @@ export const authApi = {
   },
 
   recover: async (email: string): Promise<string> => {
-    const { data } = await api.post("/api/auth/recover", { email });
+    const { data } = await api.post("/auth/recover", { email });
     return data.message as string;
   },
 };

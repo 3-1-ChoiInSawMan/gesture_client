@@ -42,17 +42,17 @@ export const callRoomApi = {
     size?: number;
     sort?: string;
   }): Promise<ApiCallRoom[]> => {
-    const { data } = await api.get("/api/call-rooms", { params });
+    const { data } = await api.get("/call-rooms", { params });
     return (data.data ?? data) as ApiCallRoom[];
   },
 
   getRoom: async (roomId: string | number): Promise<ApiCallRoom> => {
-    const { data } = await api.get(`/api/call-rooms/${roomId}`);
+    const { data } = await api.get(`/call-rooms/${roomId}`);
     return data.data as ApiCallRoom;
   },
 
   createRoom: async (body: CreateRoomRequest): Promise<CreateRoomResponse> => {
-    const { data } = await api.post("/api/call-rooms", body);
+    const { data } = await api.post("/call-rooms", body);
     return data.data as CreateRoomResponse;
   },
 
@@ -61,7 +61,7 @@ export const callRoomApi = {
     password?: string
   ): Promise<void> => {
     await api.post(
-      `/api/call-rooms/${roomId}/join`,
+      `/call-rooms/${roomId}/join`,
       password ? { password } : undefined
     );
   },
@@ -70,10 +70,10 @@ export const callRoomApi = {
     roomId: string | number,
     body: Partial<CreateRoomRequest>
   ): Promise<void> => {
-    await api.patch(`/api/call-rooms/${roomId}`, body);
+    await api.patch(`/call-rooms/${roomId}`, body);
   },
 
   deleteRoom: async (roomId: string | number): Promise<void> => {
-    await api.delete(`/api/call-rooms/${roomId}`);
+    await api.delete(`/call-rooms/${roomId}`);
   },
 };

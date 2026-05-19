@@ -29,17 +29,17 @@ export interface UpdatePasswordRequest {
 
 export const userApi = {
   getMe: async (): Promise<UserProfile> => {
-    const { data } = await api.get("/api/users/me");
+    const { data } = await api.get("/users/me");
     return data.data as UserProfile;
   },
 
   getUser: async (userId: string): Promise<UserProfile> => {
-    const { data } = await api.get(`/api/users/${userId}`);
+    const { data } = await api.get(`/users/${userId}`);
     return data.data as UserProfile;
   },
 
   searchUser: async (userId: string): Promise<UserProfile[]> => {
-    const { data } = await api.get("/api/users", { params: { userId } });
+    const { data } = await api.get("/users", { params: { userId } });
     return data.data as UserProfile[];
   },
 
@@ -50,23 +50,23 @@ export const userApi = {
       formData.append("statusMessage", body.statusMessage);
     if (body.profileImage) formData.append("profileImage", body.profileImage);
 
-    const { data } = await api.patch("/api/users", formData, {
+    const { data } = await api.patch("/users", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return data.data as UserProfile;
   },
 
   updatePassword: async (body: UpdatePasswordRequest): Promise<void> => {
-    await api.patch("/api/users/password", body);
+    await api.patch("/users/password", body);
   },
 
   requestWithdraw: async (): Promise<string> => {
-    const { data } = await api.get("/api/users/withdraw");
+    const { data } = await api.get("/users/withdraw");
     return data.data["confirmation-code"] as string;
   },
 
   withdraw: async (confirmationCode: string): Promise<void> => {
-    await api.delete("/api/users/withdraw", {
+    await api.delete("/users/withdraw", {
       params: { "confirmation-code": confirmationCode },
     });
   },

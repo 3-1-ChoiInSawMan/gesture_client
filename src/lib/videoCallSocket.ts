@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "";
+const WS_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ── Caption Socket (/api/ws/caption) ──────────────────────────
 

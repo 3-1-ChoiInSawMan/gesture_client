@@ -12,7 +12,7 @@ interface SignFrame {
 type Landmark = { x: number; y: number; z: number; visibility?: number };
 
 const WS_URL =
-  process.env.NEXT_PUBLIC_SLTT_WS_URL ?? "ws://localhost:8000/ws/sltt";
+  process.env.NEXT_PUBLIC_API_URL ?? "ws://localhost:8000/ws/sltt";
 
 const MEDIAPIPE_VERSION = "0.5.1675471629";
 

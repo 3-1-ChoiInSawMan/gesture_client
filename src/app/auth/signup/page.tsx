@@ -7,7 +7,6 @@ import Step3Profile from "@/components/signup/Step3Profile";
 
 export type SignupFormData = {
   email: string;
-  code: string;
   password: string;
   passwordConfirm: string;
   id: string;
@@ -22,7 +21,6 @@ export default function SignUp() {
   const [step, setStep] = useState<Step>(1);
   const [formData, setFormData] = useState<SignupFormData>({
     email: "",
-    code: "",
     password: "",
     passwordConfirm: "",
     id: "",

@@ -2,10 +2,8 @@
 
 import * as C from "@/components";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
-import { toast } from "react-toastify";
+import { useState } from "react";
 import { SignupFormData } from "@/app/auth/signup/page";
-import { authApi } from "@/api/authApi";
 
 interface Props {
   formData: SignupFormData;
@@ -15,44 +13,10 @@ interface Props {
 
 type Errors = {
   email?: string;
-  code?: string;
 };
-
-const EXPIRY_SECONDS = 300;
 
 export default function Step1Email({ formData, updateFormData, onNext }: Props) {
   const [errors, setErrors] = useState<Errors>({});
-  const [isVerified, setIsVerified] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m} : ${s}`;
-  };
-
-  const startTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setTimeLeft(EXPIRY_SECONDS);
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
 
   const isValidEmail = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -61,60 +25,17 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
     const { name, value } = e.target;
     updateFormData({ [name]: value });
     setErrors((prev) => ({ ...prev, [name]: undefined }));
-    if (name === "code") setIsVerified(false);
-  };
-
-  const handleSendCode = async () => {
-    if (!formData.email) {
-      setErrors((prev) => ({ ...prev, email: "이메일을 입력해주세요." }));
-      return;
-    }
-    if (!isValidEmail(formData.email)) {
-      setErrors((prev) => ({ ...prev, email: "알맞은 이메일을 입력해주세요." }));
-      return;
-    }
-    setSending(true);
-    try {
-      await authApi.emailSend(formData.email);
-      setErrors((prev) => ({ ...prev, email: undefined }));
-      setIsVerified(false);
-      startTimer();
-      toast.success("인증 코드가 전송되었습니다.");
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "인증 코드 전송에 실패했습니다.";
-      toast.error(message);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    if (!formData.code) {
-      setErrors((prev) => ({ ...prev, code: "인증 코드를 입력해주세요." }));
-      return;
-    }
-    setVerifying(true);
-    try {
-      await authApi.emailVerification(formData.code);
-      if (timerRef.current) clearInterval(timerRef.current);
-      setTimeLeft(0);
-      setErrors((prev) => ({ ...prev, code: undefined }));
-      setIsVerified(true);
-      toast.success("인증이 완료되었습니다.");
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "인증 코드가 올바르지 않습니다.";
-      toast.error(message);
-    } finally {
-      setVerifying(false);
-    }
   };
 
   const handleNext = () => {
-    if (!isVerified) return;
+    if (!formData.email) {
+      setErrors({ email: "이메일을 입력해주세요." });
+      return;
+    }
+    if (!isValidEmail(formData.email)) {
+      setErrors({ email: "올바른 이메일 형식을 입력해주세요." });
+      return;
+    }
     onNext();
   };
 
@@ -127,31 +48,13 @@ export default function Step1Email({ formData, updateFormData, onNext }: Props) 
         onChange={handleChange}
         name="email"
         type="email"
-        rightButton="send"
-        rightButtonLabel={sending ? "전송 중..." : "전송"}
-        onRightButtonClick={handleSendCode}
         errorMessage={errors.email}
-      />
-      <C.Input
-        label="인증 코드"
-        value={formData.code}
-        placeholder="인증 코드를 입력하세요"
-        onChange={handleChange}
-        name="code"
-        type="text"
-        maxLength={6}
-        rightButton="verify"
-        rightButtonLabel={verifying ? "확인 중..." : undefined}
-        timerLabel={timeLeft > 0 ? formatTime(timeLeft) : undefined}
-        onRightButtonClick={handleVerifyCode}
-        errorMessage={errors.code}
       />
       <div className="w-93.75 h-12.5 mt-4">
         <button
           type="button"
           onClick={handleNext}
-          disabled={!isVerified}
-          className="w-full h-full flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full h-full flex justify-center items-center bg-[#724BFD] rounded-[10px] text-[18px] font-semibold text-white"
         >
           다음
         </button>

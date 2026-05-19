@@ -12,10 +12,11 @@ export interface TokenResponse {
 }
 
 export interface RegisterRequest {
+  id: string;
+  email: string;
   password: string;
-  passwordConfirm: string;
-  userId: string;
   nickname: string;
+  profile_image_uuid?: string | null;
 }
 
 export const authApi = {

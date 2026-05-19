@@ -62,7 +62,7 @@ export default function Step3Profile({ formData, updateFormData, onPrev }: Props
         email: formData.email,
         password: formData.password,
         nickname: formData.nickname,
-        profile_image_uuid,
+        ...(profile_image_uuid ? { profile_image_uuid } : {}),
       });
       toast.success("회원가입이 완료되었습니다.");
       router.push("/auth/login");

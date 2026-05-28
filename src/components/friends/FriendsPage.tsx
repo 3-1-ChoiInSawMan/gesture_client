@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
+import { useAuthStore } from "@/store/authStore";
 import { useChatStore } from "@/store/chatStore";
 import ChatSidebar from "./sidebar/ChatSidebar";
 import ChatWindow from "./chat/ChatWindow";
@@ -11,6 +14,17 @@ import CreateChatRoomModal from "./modals/CreateChatRoomModal";
 
 export default function FriendsPage() {
   const { selectedRoomId } = useChatStore();
+  const { user, _hasHydrated } = useAuthStore();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (_hasHydrated && !user) {
+      toast.error("로그인이 필요한 서비스입니다.");
+      router.replace("/auth/login");
+    }
+  }, [_hasHydrated, user, router]);
+
+  if (!_hasHydrated || !user) return null;
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
   const [showCreateRoom, setShowCreateRoom] = useState(false);

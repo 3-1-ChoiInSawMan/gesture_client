@@ -9,7 +9,7 @@ export const notificationApi = {
   getSettings: async (): Promise<NotificationSetting[]> => {
     const { data } = await api.get("/notifications/settings");
     const body = data.data ?? data;
-    return (body?.settings ?? []) as NotificationSetting[];
+    return (body?.notificationSettings ?? body?.settings ?? []) as NotificationSetting[];
   },
 
   updateSetting: async (type: string, enabled: boolean): Promise<void> => {
@@ -27,7 +27,7 @@ export const notificationApi = {
         : null;
     const base = process.env.NEXT_PUBLIC_API_URL ?? "";
     return new EventSource(
-      `${base}/api/notifications/subscribe?token=${token ?? ""}`
+      `${base}/notifications/subscribe?token=${token ?? ""}`
     );
   },
 };

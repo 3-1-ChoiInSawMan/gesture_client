@@ -1,7 +1,6 @@
 "use client";
 
 import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 export default function ToastProvider() {
   return (
@@ -12,6 +11,7 @@ export default function ToastProvider() {
       closeOnClick
       pauseOnHover
       draggable={false}
+      style={{ zIndex: 99999 }}
       toastStyle={{
         borderRadius: "12px",
         fontSize: "14px",

@@ -33,6 +33,7 @@ function ParticipantTile({
 }) {
   const showMyCamera = participant.id === "me" && isCameraOn && myStream;
   const showScreenShare = participant.id === "screen-share" && screenStream;
+  const showRemoteStream = participant.id !== "me" && participant.id !== "screen-share" && !!participant.stream;
 
   return (
     <div
@@ -50,6 +51,11 @@ function ParticipantTile({
         <StreamVideo
           stream={myStream}
           mirrored
+          className="w-full h-full object-cover"
+        />
+      ) : showRemoteStream ? (
+        <StreamVideo
+          stream={participant.stream!}
           className="w-full h-full object-cover"
         />
       ) : participant.isCameraOff ? (

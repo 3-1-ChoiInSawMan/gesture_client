@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
-const MOCK_CODE = "1234";
-
 interface JoinPrivateRoomModalProps {
   roomTitle: string;
   onClose: () => void;
@@ -43,10 +41,6 @@ export default function JoinPrivateRoomModal({
       toast.error("4자리를 모두 입력해주세요.");
       return;
     }
-    if (code !== MOCK_CODE) {
-      toast.error("잘못된 코드입니다.");
-      return;
-    }
     onJoin(code);
   };
 
@@ -76,7 +70,7 @@ export default function JoinPrivateRoomModal({
             {roomTitle}
           </h2>
           <p className="text-[14px] text-[#555555] text-center">
-            {roomTitle}에 참여하시겠습니까?
+            참여 코드를 입력해주세요
           </p>
 
           <div className="flex justify-center gap-3">

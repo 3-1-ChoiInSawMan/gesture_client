@@ -21,13 +21,13 @@ export default function useProfile() {
       const updated = await userApi.updateUser({
         nickname: fields.nickname,
         statusMessage: fields.statusMessage,
-        profileImage: fields.profileImageFile,
+        ...(fields.profileImageFile ? { profileImage: fields.profileImageFile } : {}),
       });
       setUser({
         ...user,
         nickname: updated.nickname,
         statusMessage: updated.statusMessage,
-        profileImage: updated.profileImage,
+        profileImage: updated.profileUrl ?? updated.profileImage,
       });
       toast.success("프로필이 업데이트되었습니다.");
     } catch (err: unknown) {
@@ -38,10 +38,14 @@ export default function useProfile() {
     }
   };
 
-  const deleteAccount = async () => {
+  // 탈퇴: 1단계 - 비밀번호로 이메일 인증 요청, 2단계 - 이메일 인증 코드로 탈퇴 확인
+  const requestWithdraw = async (password: string) => {
+    await userApi.requestWithdraw(password);
+  };
+
+  const confirmWithdraw = async (confirmationCode: string) => {
     try {
-      const confirmCode = await userApi.requestWithdraw();
-      await userApi.withdraw(confirmCode);
+      await userApi.confirmWithdraw(confirmationCode);
       clearUser();
       router.push("/auth/signup");
       toast.success("회원 탈퇴 되었습니다.");
@@ -53,5 +57,5 @@ export default function useProfile() {
     }
   };
 
-  return { user, getProfile, updateProfile, deleteAccount };
+  return { user, getProfile, updateProfile, requestWithdraw, confirmWithdraw };
 }

@@ -23,7 +23,7 @@ export const quickSlotApi = {
     return (body?.quickSlots ?? []) as (QuickSlot | null)[];
   },
 
-  update: async (slots: { name: string; mediaUrl: string }[]): Promise<void> => {
-    await api.patch("/quick-slots/me", { slots });
+  update: async (slots: ({ actionName: string; mediaUrl: string } | null)[]): Promise<void> => {
+    await api.patch("/quick-slots", { quickSlots: slots });
   },
 };

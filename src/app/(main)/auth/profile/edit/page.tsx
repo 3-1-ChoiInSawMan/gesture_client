@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { userApi } from "@/api/userApi";
@@ -13,16 +13,26 @@ type Errors = {
 };
 
 export default function ProfileEditPage() {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, _hasHydrated } = useAuthStore();
   const router = useRouter();
 
-  const [nickname, setNickname] = useState(user?.nickname ?? "");
-  const [statusMessage, setStatusMessage] = useState(user?.statusMessage ?? "");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(user?.profileImage ?? null);
+  const [nickname, setNickname] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
 
+  // hydration 완료 후 user 데이터로 폼 초기화
+  useEffect(() => {
+    if (_hasHydrated && user) {
+      setNickname(user.nickname ?? "");
+      setStatusMessage(user.statusMessage ?? "");
+      setPreviewUrl(user.profileImage ?? null);
+    }
+  }, [_hasHydrated, user]);
+
+  if (!_hasHydrated) return null;
   if (!user) {
     router.push("/auth/login");
     return null;
@@ -50,18 +60,28 @@ export default function ProfileEditPage() {
       return;
     }
 
+    const unchanged =
+      nickname === (user.nickname ?? "") &&
+      statusMessage === (user.statusMessage ?? "") &&
+      !profileImageFile;
+
+    if (unchanged) {
+      router.push("/auth/profile");
+      return;
+    }
+
     setLoading(true);
     try {
       const updated = await userApi.updateUser({
         nickname,
         statusMessage,
-        profileImage: profileImageFile ?? undefined,
+        ...(profileImageFile ? { profileImage: profileImageFile } : {}),
       });
       setUser({
         ...user,
-        nickname: updated.nickname,
-        statusMessage: updated.statusMessage,
-        profileImage: updated.profileImage,
+        nickname: updated?.nickname ?? nickname,
+        statusMessage: updated?.statusMessage ?? statusMessage,
+        profileImage: updated?.profileUrl ?? updated?.profileImage ?? user.profileImage,
       });
       toast.success("프로필이 수정되었습니다.");
       router.push("/auth/profile");

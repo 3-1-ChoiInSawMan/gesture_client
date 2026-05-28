@@ -6,28 +6,51 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface TokenResponse {
+export interface LoginUser {
+  idx: number;
+  id: string;
+  email: string;
+  nickname: string;
+  profileUrl: string | null;
+  statusMessage: string | null;
+  createdAt: string;
+}
+
+export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
+  user: LoginUser;
 }
 
 export interface RegisterRequest {
   id: string;
   email: string;
   password: string;
+  passwordConfirm: string;
   nickname: string;
-  profile_image_uuid?: string | null;
 }
 
 export const authApi = {
-  login: async (body: LoginRequest): Promise<TokenResponse> => {
+  login: async (body: LoginRequest): Promise<LoginResponse> => {
     const { data } = await api.post("/auth/login", body);
-    const tokens: TokenResponse = data.data;
+    const user = data.data.user as LoginUser & { accessToken: string; refreshToken: string };
     if (typeof window !== "undefined") {
-      localStorage.setItem("accessToken", tokens.accessToken);
+      localStorage.setItem("accessToken", user.accessToken);
     }
-    setCookie("refreshToken", tokens.refreshToken);
-    return tokens;
+    setCookie("refreshToken", user.refreshToken);
+    return {
+      accessToken: user.accessToken,
+      refreshToken: user.refreshToken,
+      user: {
+        idx: user.idx,
+        id: user.id,
+        email: user.email,
+        nickname: user.nickname,
+        profileUrl: user.profileUrl,
+        statusMessage: user.statusMessage,
+        createdAt: user.createdAt,
+      },
+    };
   },
 
   emailSend: async (email: string): Promise<string> => {
@@ -35,8 +58,8 @@ export const authApi = {
     return data.message as string;
   },
 
-  emailVerification: async (code: string): Promise<string> => {
-    const { data } = await api.post("/auth/email-verification", { code });
+  emailVerification: async (email: string, code: string): Promise<string> => {
+    const { data } = await api.post("/auth/email-verification", { email, code });
     return data.message as string;
   },
 
@@ -45,7 +68,8 @@ export const authApi = {
   },
 
   logout: async (): Promise<void> => {
-    await api.post("/auth/logout");
+    // TODO: 백엔드 구현 후 활성화
+    // await api.post("/auth/logout");
     if (typeof window !== "undefined") {
       localStorage.removeItem("accessToken");
     }

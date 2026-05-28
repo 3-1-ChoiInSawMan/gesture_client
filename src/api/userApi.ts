@@ -6,6 +6,7 @@ export interface UserProfile {
   nickname: string;
   email: string;
   profileImage?: string;
+  profileUrl?: string;
   statusMessage?: string;
   joinedAt: string;
   stats?: {
@@ -30,7 +31,11 @@ export interface UpdatePasswordRequest {
 export const userApi = {
   getMe: async (): Promise<UserProfile> => {
     const { data } = await api.get("/users/me");
-    return data.data as UserProfile;
+    const body = data.data ?? data;
+    return {
+      ...body,
+      profileImage: body.profileUrl ?? body.profileImage,
+    } as UserProfile;
   },
 
   getUser: async (userId: string): Promise<UserProfile> => {
@@ -40,18 +45,15 @@ export const userApi = {
 
   searchUser: async (userId: string): Promise<UserProfile[]> => {
     const { data } = await api.get("/users", { params: { userId } });
-    return data.data as UserProfile[];
+    const body = data.data ?? data;
+    return (body?.searchedUser ?? []) as UserProfile[];
   },
 
   updateUser: async (body: UpdateUserRequest): Promise<UserProfile> => {
-    const formData = new FormData();
-    if (body.nickname) formData.append("nickname", body.nickname);
-    if (body.statusMessage !== undefined)
-      formData.append("statusMessage", body.statusMessage);
-    if (body.profileImage) formData.append("profileImage", body.profileImage);
-
-    const { data } = await api.patch("/users", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+    // TODO: 이미지 필드명 백엔드 확인 후 활성화
+    const { data } = await api.patch("/users/me", {
+      nickname: body.nickname,
+      statusMessage: body.statusMessage,
     });
     return data.data as UserProfile;
   },
@@ -60,13 +62,12 @@ export const userApi = {
     await api.patch("/users/password", body);
   },
 
-  requestWithdraw: async (): Promise<string> => {
-    const { data } = await api.get("/users/withdraw");
-    return data.data["confirmation-code"] as string;
+  requestWithdraw: async (password: string): Promise<void> => {
+    await api.delete("/users/withdraw", { data: { password } });
   },
 
-  withdraw: async (confirmationCode: string): Promise<void> => {
-    await api.delete("/users/withdraw", {
+  confirmWithdraw: async (confirmationCode: string): Promise<void> => {
+    await api.get("/users/withdraw", {
       params: { "confirmation-code": confirmationCode },
     });
   },

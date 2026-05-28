@@ -12,14 +12,15 @@ import RecentChats from "@/components/profile/RecentChats";
 import QuickSlots from "@/components/profile/QuickSlots";
 
 export default function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
   const { logout } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!user) router.push("/auth/login");
-  }, [user, router]);
+    if (_hasHydrated && !user) router.push("/auth/login");
+  }, [user, _hasHydrated, router]);
 
+  if (!_hasHydrated) return null;
   if (!user) return null;
 
   return (

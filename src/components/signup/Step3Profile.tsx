@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { SignupFormData } from "@/app/auth/signup/page";
 import { authApi } from "@/api/authApi";
-import { mediaApi } from "@/api/mediaApi";
 import ProfileImageUploader from "@/components/common/ProfileImageUploader";
 
 interface Props {
@@ -48,21 +47,12 @@ export default function Step3Profile({ formData, updateFormData, onPrev }: Props
 
     setLoading(true);
     try {
-      let profile_image_uuid: string | null = null;
-      if (formData.profileImage) {
-        try {
-          profile_image_uuid = await mediaApi.upload(formData.profileImage);
-        } catch {
-          // 이미지 업로드 실패해도 회원가입 진행
-        }
-      }
-
       await authApi.register({
         id: formData.id,
         email: formData.email,
         password: formData.password,
+        passwordConfirm: formData.passwordConfirm,
         nickname: formData.nickname,
-        ...(profile_image_uuid ? { profile_image_uuid } : {}),
       });
       toast.success("회원가입이 완료되었습니다.");
       router.push("/auth/login");

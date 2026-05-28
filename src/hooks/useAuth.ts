@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
 import { authApi } from "@/api/authApi";
-import { userApi } from "@/api/userApi";
 
 interface LoginData {
   id: string;
@@ -21,19 +20,18 @@ export default function useAuth() {
   const login = async ({ id, password }: LoginData) => {
     setLoading(true);
     try {
-      await authApi.login({ email: id, password });
-      const profile = await userApi.getMe();
+      const result = await authApi.login({ email: id, password });
       setUser({
-        id: profile.userId ?? profile.id,
-        nickname: profile.nickname,
-        email: profile.email,
-        profileImage: profile.profileImage,
-        statusMessage: profile.statusMessage,
-        joinedAt: profile.joinedAt,
-        stats: profile.stats ?? { totalCalls: 0, friends: 0, rooms: 0 },
+        id: result.user.id,
+        nickname: result.user.nickname,
+        email: result.user.email,
+        profileImage: result.user.profileUrl ?? undefined,
+        statusMessage: result.user.statusMessage ?? undefined,
+        joinedAt: result.user.createdAt,
+        stats: { totalCalls: 0, friends: 0, rooms: 0 },
       });
-      toast.success("로그인 성공");
-      router.push("/auth/profile");
+      toast.success("로그인에 성공했습니다.");
+      router.push("/");
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data

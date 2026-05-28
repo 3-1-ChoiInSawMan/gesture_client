@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
-import { INVITE_CANDIDATES } from "./mockData";
+import { toast } from "react-toastify";
+import { friendApi, Friend } from "@/api/friendApi";
 
 interface InviteModalProps {
+  roomId: string;
   onClose: () => void;
 }
 
-export default function InviteModal({ onClose }: InviteModalProps) {
+export default function InviteModal({ roomId, onClose }: InviteModalProps) {
   const [search, setSearch] = useState("");
-  const [invited, setInvited] = useState<Set<string>>(
-    new Set(
-      INVITE_CANDIDATES.filter((c) => c.invited).map((c) => c.id)
-    )
-  );
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [invited, setInvited] = useState<Set<string>>(new Set());
+  const [inviting, setInviting] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -23,19 +24,36 @@ export default function InviteModal({ onClose }: InviteModalProps) {
     };
   }, []);
 
-  const filtered = INVITE_CANDIDATES.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.username.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    friendApi
+      .getFriends()
+      .then(setFriends)
+      .catch(() => toast.error("친구 목록을 불러오지 못했습니다."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = friends.filter(
+    (f) =>
+      f.nickname.toLowerCase().includes(search.toLowerCase()) ||
+      f.userId.toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggleInvite = (id: string) => {
-    setInvited((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const handleInvite = async (friend: Friend) => {
+    if (invited.has(friend.userId) || inviting.has(friend.userId)) return;
+    setInviting((prev) => new Set(prev).add(friend.userId));
+    try {
+      await friendApi.inviteFriend(friend.userId, roomId);
+      setInvited((prev) => new Set(prev).add(friend.userId));
+      toast.success(`${friend.nickname}님을 초대했습니다.`);
+    } catch {
+      toast.error("초대에 실패했습니다.");
+    } finally {
+      setInviting((prev) => {
+        const next = new Set(prev);
+        next.delete(friend.userId);
+        return next;
+      });
+    }
   };
 
   return (
@@ -68,7 +86,7 @@ export default function InviteModal({ onClose }: InviteModalProps) {
               <Search size={15} className="text-[#AAAAAA] shrink-0" />
               <input
                 type="text"
-                placeholder="아이디"
+                placeholder="아이디 또는 닉네임"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 text-[13px] text-[#333] placeholder:text-[#AAAAAA] outline-none bg-transparent"
@@ -76,46 +94,56 @@ export default function InviteModal({ onClose }: InviteModalProps) {
             </div>
           </div>
 
-          {/* 사용자 목록 */}
+          {/* 친구 목록 */}
           <div className="px-4 max-h-[260px] overflow-y-auto flex flex-col gap-1">
-            {filtered.map((candidate) => {
-              const isInvited = invited.has(candidate.id);
-              return (
-                <div
-                  key={candidate.id}
-                  className="flex items-center gap-3 px-2 py-2.5 rounded-[10px] hover:bg-[#F5F5F5] transition-colors"
-                >
-                  {/* 아바타 */}
-                  <div className="w-9 h-9 rounded-full bg-[#724BFD]/20 flex items-center justify-center shrink-0">
-                    <span className="text-[13px] font-semibold text-[#724BFD]">
-                      {candidate.name[0]}
-                    </span>
-                  </div>
-
-                  {/* 이름 */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-[#333] truncate">
-                      {candidate.name}
-                    </p>
-                    <p className="text-[11px] text-[#AAAAAA] truncate">
-                      @{candidate.username}
-                    </p>
-                  </div>
-
-                  {/* 초대 버튼 */}
-                  <button
-                    onClick={() => toggleInvite(candidate.id)}
-                    className={`shrink-0 h-[30px] px-3 rounded-[8px] text-[11px] font-medium transition-colors ${
-                      isInvited
-                        ? "bg-[#E8F5E9] text-[#4CAF50] border border-[#4CAF50]"
-                        : "bg-[#724BFD] text-white hover:bg-[#5f3de0]"
-                    }`}
+            {loading ? (
+              <p className="text-[13px] text-[#AAAAAA] text-center py-4">불러오는 중...</p>
+            ) : filtered.length === 0 ? (
+              <p className="text-[13px] text-[#AAAAAA] text-center py-4">
+                {search ? "검색 결과가 없습니다." : "친구가 없습니다."}
+              </p>
+            ) : (
+              filtered.map((friend) => {
+                const isInvited = invited.has(friend.userId);
+                const isInviting = inviting.has(friend.userId);
+                return (
+                  <div
+                    key={friend.userId}
+                    className="flex items-center gap-3 px-2 py-2.5 rounded-[10px] hover:bg-[#F5F5F5] transition-colors"
                   >
-                    {isInvited ? "완료" : "초대하기"}
-                  </button>
-                </div>
-              );
-            })}
+                    {/* 아바타 */}
+                    <div className="w-9 h-9 rounded-full bg-[#724BFD]/20 flex items-center justify-center shrink-0">
+                      <span className="text-[13px] font-semibold text-[#724BFD]">
+                        {friend.nickname[0]}
+                      </span>
+                    </div>
+
+                    {/* 이름 */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-[#333] truncate">
+                        {friend.nickname}
+                      </p>
+                      <p className="text-[11px] text-[#AAAAAA] truncate">
+                        @{friend.userId}
+                      </p>
+                    </div>
+
+                    {/* 초대 버튼 */}
+                    <button
+                      onClick={() => handleInvite(friend)}
+                      disabled={isInvited || isInviting}
+                      className={`shrink-0 h-[30px] px-3 rounded-[8px] text-[11px] font-medium transition-colors disabled:opacity-60 ${
+                        isInvited
+                          ? "bg-[#E8F5E9] text-[#4CAF50] border border-[#4CAF50]"
+                          : "bg-[#724BFD] text-white hover:bg-[#5f3de0]"
+                      }`}
+                    >
+                      {isInvited ? "완료" : isInviting ? "..." : "초대하기"}
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* 완료 버튼 */}

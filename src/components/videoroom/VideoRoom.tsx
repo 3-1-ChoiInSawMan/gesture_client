@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Captions, Settings } from "lucide-react";
 import StreamVideo from "./StreamVideo";
 import { ActivePanel, ChatMessage, Participant } from "./types";
-import { MOCK_MESSAGES, MOCK_PARTICIPANTS, MOCK_SUBTITLE, SCREEN_SHARE_PARTICIPANT } from "./mockData";
+import { SCREEN_SHARE_PARTICIPANT } from "./mockData";
 import ParticipantStrip from "./ParticipantStrip";
 import VideoControls from "./VideoControls";
 import ChatPanel from "./ChatPanel";
@@ -14,6 +14,10 @@ import MeetingNotesPanel from "./MeetingNotesPanel";
 import InviteModal from "./InviteModal";
 import RoomSettingsModal from "./RoomSettingsModal";
 import { useSignLanguage } from "./useSignLanguage";
+import { useChatSocket } from "./useChatSocket";
+import { useWebRTC } from "./useWebRTC";
+import { callRoomApi } from "@/api/callRoomApi";
+import { useAuthStore } from "@/store/authStore";
 
 interface VideoRoomProps {
   roomId: string;
@@ -23,12 +27,13 @@ interface VideoRoomProps {
 }
 
 export default function VideoRoom({
-  roomId: _roomId,
-  roomTitle = "수화 배울 사람 들어와",
-  isHost = true,
-  isPrivate = true,
+  roomId,
+  roomTitle = "통화방",
+  isHost = false,
+  isPrivate = false,
 }: VideoRoomProps) {
   const router = useRouter();
+  const { user } = useAuthStore();
 
   // ── 패널 상태 ─────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -41,49 +46,6 @@ export default function VideoRoom({
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isSubtitlesOn, setIsSubtitlesOn] = useState(false);
-
-  // ── 채팅 ────────────────────────────────────────────────
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_MESSAGES);
-
-  // ── 참여자 ────────────────────────────────────────────────
-  const [participants] = useState<Participant[]>(MOCK_PARTICIPANTS);
-  const speakingParticipant = participants.find((p) => p.isSpeaking);
-
-  const participantsWithMyState = useMemo(
-    () =>
-      participants.map((p) =>
-        p.id === "me" ? { ...p, isMuted: !isMicOn, isCameraOff: !isCameraOn } : p
-      ),
-    [participants, isMicOn, isCameraOn]
-  );
-
-  const allParticipants = useMemo(
-    () =>
-      isScreenSharing
-        ? [...participantsWithMyState, SCREEN_SHARE_PARTICIPANT]
-        : participantsWithMyState,
-    [participantsWithMyState, isScreenSharing]
-  );
-
-  const [mainParticipantId, setMainParticipantId] = useState("me");
-  const [stripOrder, setStripOrder] = useState(
-    participants.filter((p) => p.id !== "me").map((p) => p.id)
-  );
-
-  const mainParticipant = allParticipants.find((p) => p.id === mainParticipantId);
-  const stripParticipants = stripOrder
-    .map((id) => allParticipants.find((p) => p.id === id))
-    .filter((p): p is Participant => !!p);
-
-  const handleSelectParticipant = useCallback((selectedId: string) => {
-    setStripOrder((prev) => {
-      const idx = prev.indexOf(selectedId);
-      const next = [...prev];
-      next[idx] = mainParticipantId;
-      return next;
-    });
-    setMainParticipantId(selectedId);
-  }, [mainParticipantId]);
 
   // ── 카메라 스트림 ──────────────────────────────────────────
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -108,8 +70,118 @@ export default function VideoRoom({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── 마이크 스트림 ──────────────────────────────────────────
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const [myIsSpeaking, setMyIsSpeaking] = useState(false);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioFrameRef = useRef<number | null>(null);
+
+  const cleanupAudio = useCallback(() => {
+    if (audioFrameRef.current) cancelAnimationFrame(audioFrameRef.current);
+    audioFrameRef.current = null;
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    setMicStream(null);
+  }, []);
+
+  useEffect(() => {
+    if (!isMicOn) {
+      cleanupAudio();
+      setMyIsSpeaking(false);
+      return;
+    }
+    navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        audioStreamRef.current = stream;
+        setMicStream(stream);
+        const ctx = new AudioContext();
+        audioContextRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        const data = new Uint8Array(analyser.fftSize);
+        const tick = () => {
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for (const v of data) { const n = (v - 128) / 128; sum += n * n; }
+          setMyIsSpeaking(Math.sqrt(sum / data.length) > 0.02);
+          audioFrameRef.current = requestAnimationFrame(tick);
+        };
+        tick();
+      })
+      .catch(() => {});
+    return cleanupAudio;
+  }, [isMicOn, cleanupAudio]);
+
   // ── 화면 공유 스트림 ──────────────────────────────────────
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // ── WebRTC ───────────────────────────────────────────────
+  const { remoteParticipants } = useWebRTC({
+    roomId,
+    userId: user?.id ?? "",
+    nickname: user?.nickname ?? "익명",
+    localVideoStream: cameraStream,
+    localAudioStream: micStream,
+  });
+
+  // ── 참여자 목록 (나 + 원격) ─────────────────────────────────
+  const myParticipant: Participant = useMemo(() => ({
+    id: "me",
+    name: user?.nickname ?? "나",
+    username: user?.id ?? "me",
+    isMuted: !isMicOn,
+    isCameraOff: !isCameraOn,
+  }), [user, isMicOn, isCameraOn]);
+
+  const participants: Participant[] = useMemo(
+    () => [myParticipant, ...remoteParticipants],
+    [myParticipant, remoteParticipants]
+  );
+
+  const speakingParticipant = remoteParticipants.find((p) => p.isSpeaking);
+
+  const allParticipants = useMemo(
+    () => isScreenSharing ? [...participants, SCREEN_SHARE_PARTICIPANT] : participants,
+    [participants, isScreenSharing]
+  );
+
+  const [mainParticipantId, setMainParticipantId] = useState("me");
+  const [stripOrder, setStripOrder] = useState<string[]>([]);
+
+  // 원격 참여자 변경 시 stripOrder 동기화
+  useEffect(() => {
+    setStripOrder((prev) => {
+      const remoteIds = remoteParticipants.map((p) => p.id);
+      const kept = prev.filter((id) => remoteIds.includes(id));
+      const added = remoteIds.filter((id) => !prev.includes(id));
+      return [...kept, ...added];
+    });
+  }, [remoteParticipants]);
+
+  const mainParticipant = allParticipants.find((p) => p.id === mainParticipantId);
+  const stripParticipants = stripOrder
+    .map((id) => allParticipants.find((p) => p.id === id))
+    .filter((p): p is Participant => !!p);
+
+  const handleSelectParticipant = useCallback((selectedId: string) => {
+    setStripOrder((prev) => {
+      const idx = prev.indexOf(selectedId);
+      const next = [...prev];
+      next[idx] = mainParticipantId;
+      return next;
+    });
+    setMainParticipantId(selectedId);
+  }, [mainParticipantId]);
 
   const stopScreenShare = useCallback(() => {
     setScreenStream((prev) => {
@@ -142,55 +214,6 @@ export default function VideoRoom({
     }
   }, [isScreenSharing, mainParticipantId, stopScreenShare]);
 
-  // ── 마이크 음성 감지 ──────────────────────────────────────
-  const [myIsSpeaking, setMyIsSpeaking] = useState(false);
-  const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioFrameRef = useRef<number | null>(null);
-
-  const cleanupAudio = useCallback(() => {
-    if (audioFrameRef.current) cancelAnimationFrame(audioFrameRef.current);
-    audioFrameRef.current = null;
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((t) => t.stop());
-      audioStreamRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isMicOn) {
-      cleanupAudio();
-      setMyIsSpeaking(false);
-      return;
-    }
-    navigator.mediaDevices
-      .getUserMedia({ audio: true, video: false })
-      .then((stream) => {
-        audioStreamRef.current = stream;
-        const ctx = new AudioContext();
-        audioContextRef.current = ctx;
-        const source = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-        const data = new Uint8Array(analyser.fftSize);
-        const tick = () => {
-          analyser.getByteTimeDomainData(data);
-          let sum = 0;
-          for (const v of data) { const n = (v - 128) / 128; sum += n * n; }
-          setMyIsSpeaking(Math.sqrt(sum / data.length) > 0.02);
-          audioFrameRef.current = requestAnimationFrame(tick);
-        };
-        tick();
-      })
-      .catch(() => {});
-    return cleanupAudio;
-  }, [isMicOn, cleanupAudio]);
-
   const effectiveSpeakingId =
     isMicOn && myIsSpeaking ? "me" : (speakingParticipant?.id ?? "");
 
@@ -209,31 +232,52 @@ export default function VideoRoom({
     return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
   }, [resetHideTimer]);
 
+  // ── 채팅 ────────────────────────────────────────────────
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  const handleReceiveMessage = useCallback((msg: ChatMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const { sendMessage: socketSendMessage } = useChatSocket(roomId, handleReceiveMessage);
+
   // ── 방 정보 ──────────────────────────────────────────────
   const [currentRoomTitle, setCurrentRoomTitle] = useState(roomTitle);
   const [currentIsPrivate, setCurrentIsPrivate] = useState(isPrivate);
+  const [currentIsHost, setCurrentIsHost] = useState(isHost);
   const [currentCode, setCurrentCode] = useState("1234");
+
+  useEffect(() => {
+    callRoomApi.getRoom(roomId).then((room) => {
+      setCurrentRoomTitle(room.title);
+      setCurrentIsPrivate(!(room.isPublic ?? true));
+      if (user && room.host) {
+        setCurrentIsHost(user.id === room.host.userName);
+      }
+    }).catch(() => {});
+  }, [roomId, user]);
 
   const togglePanel = useCallback((panel: Exclude<ActivePanel, null>) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   }, []);
 
   const handleOpenMeetingNotes = useCallback(() => {
-    if (!isHost) { setShowMeetingNotice(true); return; }
+    if (!currentIsHost) { setShowMeetingNotice(true); return; }
     togglePanel("meeting-notes");
-  }, [isHost, togglePanel]);
+  }, [currentIsHost, togglePanel]);
 
   const handleSendMessage = useCallback((message: string) => {
     const newMsg: ChatMessage = {
       id: Date.now().toString(),
       participantId: "me",
-      name: "나",
-      username: "me",
+      name: user?.nickname ?? "나",
+      username: user?.id ?? "me",
       message,
       time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
     };
     setMessages((prev) => [...prev, newMsg]);
-  }, []);
+    socketSendMessage(message);
+  }, [user, socketSendMessage]);
 
   const handleEndCall = useCallback(() => router.push("/call"), [router]);
 
@@ -277,6 +321,16 @@ export default function VideoRoom({
         />
       );
     }
+    // 원격 참여자 스트림
+    const remotePeer = remoteParticipants.find((p) => p.id === mainParticipantId);
+    if (remotePeer?.stream) {
+      return (
+        <StreamVideo
+          stream={remotePeer.stream}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      );
+    }
     return (
       <div
         className="w-full h-full"
@@ -285,7 +339,7 @@ export default function VideoRoom({
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-32 h-32 rounded-full bg-white/5 flex items-center justify-center">
             <span className="text-6xl text-white/20 font-light">
-              {mainParticipant?.name[0] ?? "권"}
+              {mainParticipant?.name[0] ?? "?"}
             </span>
           </div>
         </div>
@@ -354,12 +408,12 @@ export default function VideoRoom({
           )}
           {activePanel === "participants" && (
             <ParticipantsPanel
-              participants={participantsWithMyState}
+              participants={participants}
               onClose={() => setActivePanel(null)}
               onInvite={() => setShowInviteModal(true)}
             />
           )}
-          {activePanel === "meeting-notes" && isHost && (
+          {activePanel === "meeting-notes" && currentIsHost && (
             <MeetingNotesPanel isHost={true} onClose={() => setActivePanel(null)} />
           )}
         </div>
@@ -408,7 +462,7 @@ export default function VideoRoom({
         </button>
       </div>
 
-      {showInviteModal && <InviteModal onClose={() => setShowInviteModal(false)} />}
+      {showInviteModal && <InviteModal roomId={roomId} onClose={() => setShowInviteModal(false)} />}
       {showSettingsModal && (
         <RoomSettingsModal
           roomTitle={currentRoomTitle}

@@ -1,11 +1,14 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import VideoRoom from "@/components/videoroom/VideoRoom";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function RoomPage() {
-  const params = useParams();
-  const roomId = Array.isArray(params.id) ? params.id[0] : (params.id ?? "1");
+export default function RoomIdPage() {
+  const router = useRouter();
 
-  return <VideoRoom roomId={roomId} />;
+  useEffect(() => {
+    router.replace("/call");
+  }, [router]);
+
+  return null;
 }

@@ -3,11 +3,24 @@
 import * as C from "@/components";
 import * as I from "@/assets/index";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import useAuth from "@/hooks/useAuth";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import { loginInputFields } from "@/constants/auth";
+import { toast } from "react-toastify";
+
+function ExpiredToast() {
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("expired") === "1") {
+      toast.error(
+        <span>세션이 만료되었습니다.<br />다시 로그인해주세요.</span>
+      );
+    }
+  }, [searchParams]);
+  return null;
+}
 
 export default function Login() {
   const { login, loading } = useAuth();
@@ -18,10 +31,12 @@ export default function Login() {
   });
   const [autoLogin, setAutoLogin] = useState(false);
 
+  const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+
   const loginButtonImages = [
-    { image: I.Kakao, alt: "kakao" },
-    { image: I.Naver, alt: "naver" },
-    { image: I.Google, alt: "google" },
+    { image: I.Kakao, alt: "kakao", href: `${BASE}/auth/kakao` },
+    { image: I.Naver, alt: "naver", href: `${BASE}/auth/naver` },
+    { image: I.Google, alt: "google", href: `${BASE}/auth/google` },
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,6 +51,7 @@ export default function Login() {
 
   return (
     <div className="flex justify-center pb-17.5">
+      <Suspense><ExpiredToast /></Suspense>
       <button
         onClick={() => router.push("/")}
         className="fixed top-5 left-6 flex items-center gap-1 text-[#724BFD] hover:text-[#5f3de0] transition-colors"
@@ -102,7 +118,7 @@ export default function Login() {
         </div>
         <div className="w-50 h-12 flex justify-between mt-9.25">
           {loginButtonImages.map((i) => (
-            <C.LoginButton image={i.image} alt={i.alt} key={i.alt} />
+            <C.LoginButton image={i.image} alt={i.alt} href={i.href} key={i.alt} />
           ))}
         </div>
       </div>

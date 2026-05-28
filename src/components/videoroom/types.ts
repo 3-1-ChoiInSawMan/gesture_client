@@ -8,6 +8,7 @@ export interface Participant {
   isCameraOff?: boolean;
   isSpeaking?: boolean;
   role?: string;
+  stream?: MediaStream;
 }
 
 export interface ChatMessage {

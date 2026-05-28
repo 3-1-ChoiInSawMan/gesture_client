@@ -14,7 +14,7 @@ interface Props {
 export default function AccountSettings({ onLogout }: Props) {
   const [showLogout, setShowLogout] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const { deleteAccount } = useProfile();
+  const { requestWithdraw, confirmWithdraw } = useProfile();
 
   return (
     <>
@@ -68,7 +68,8 @@ export default function AccountSettings({ onLogout }: Props) {
       {showDelete && (
         <DeleteAccountModal
           onClose={() => setShowDelete(false)}
-          onConfirm={deleteAccount}
+          onRequestWithdraw={requestWithdraw}
+          onConfirmWithdraw={confirmWithdraw}
         />
       )}
     </>

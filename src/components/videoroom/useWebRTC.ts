@@ -348,7 +348,7 @@ export function useWebRTC(params: {
         };
         dc.onmessage = (ev) => {
           try {
-            const msg: { type: string } = JSON.parse(ev.data as string);
+            const msg: { type: string; text?: string; name?: string } = JSON.parse(ev.data as string);
             if (msg.type === "camera_on") {
               setRemoteParticipants((prev) =>
                 prev.map((p) => (p.id === peerId ? { ...p, isCameraOff: false } : p))

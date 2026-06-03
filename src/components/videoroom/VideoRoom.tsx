@@ -1,8 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+
+/** 원격 참여자 오디오를 항상 재생 — 카메라 꺼져도 소리는 들려야 함 */
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.srcObject = stream;
+    el.play().catch(() => {});
+    return () => { el.srcObject = null; };
+  }, [stream]);
+  return <audio ref={ref} autoPlay />;
+}
 import { useRouter } from "next/navigation";
-import { Captions, Settings } from "lucide-react";
+import { Captions, MicOff, Settings } from "lucide-react";
 import StreamVideo from "./StreamVideo";
 import { ActivePanel, ChatMessage, Participant } from "./types";
 import { SCREEN_SHARE_PARTICIPANT } from "./mockData";
@@ -49,25 +62,36 @@ export default function VideoRoom({
 
   // ── 카메라 스트림 ──────────────────────────────────────────
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (!isCameraOn) {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach((t) => t.stop());
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+        cameraStreamRef.current = null;
         setCameraStream(null);
       }
       return;
     }
+    let cancelled = false;
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then(setCameraStream)
-      .catch(() => setIsCameraOn(false));
+      .then((stream) => {
+        if (cancelled) {
+          // isCameraOn이 이미 false로 바뀐 경우 — 획득한 스트림 즉시 해제
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        setCameraStream(stream);
+      })
+      .catch(() => { if (!cancelled) setIsCameraOn(false); });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraOn]);
 
   useEffect(() => {
-    return () => { cameraStream?.getTracks().forEach((t) => t.stop()); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cameraStreamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, []);
 
   // ── 마이크 스트림 ──────────────────────────────────────────
@@ -122,17 +146,42 @@ export default function VideoRoom({
     return cleanupAudio;
   }, [isMicOn, cleanupAudio]);
 
+  // ── 자막 라인 (닉네임 : 텍스트) ─────────────────────────────
+  const [captionLine, setCaptionLine] = useState<{ name: string; text: string } | null>(null);
+  const captionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showCaption = useCallback((name: string, text: string) => {
+    setCaptionLine({ name, text });
+    if (captionTimerRef.current) clearTimeout(captionTimerRef.current);
+    captionTimerRef.current = setTimeout(() => setCaptionLine(null), 6000);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (captionTimerRef.current) clearTimeout(captionTimerRef.current); };
+  }, []);
+
   // ── 화면 공유 스트림 ──────────────────────────────────────
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
   // ── WebRTC ───────────────────────────────────────────────
-  const { remoteParticipants } = useWebRTC({
+  const { remoteParticipants, sendCaption, sendFrame } = useWebRTC({
     roomId,
     userId: user?.id ?? "",
     nickname: user?.nickname ?? "익명",
     localVideoStream: cameraStream,
     localAudioStream: micStream,
+    screenStream,
+    isSpeaking: isMicOn && myIsSpeaking,
+    onCaption: showCaption,
+    onTranslation: (text) => {
+      const myName = user?.nickname ?? "나";
+      showCaption(myName, text);
+      sendCaption(text);
+    },
   });
+
+  // 원격 발화 상태는 DataChannel로 수신된 p.isSpeaking 사용
+  const remoteSpeakingId = remoteParticipants.find((p) => p.isSpeaking)?.id ?? "";
 
   // ── 참여자 목록 (나 + 원격) ─────────────────────────────────
   const myParticipant: Participant = useMemo(() => ({
@@ -148,7 +197,13 @@ export default function VideoRoom({
     [myParticipant, remoteParticipants]
   );
 
-  const speakingParticipant = remoteParticipants.find((p) => p.isSpeaking);
+  // 원격 참여자 중 화면 공유 중인 사람
+  const screenSharingPeerId = useMemo(
+    () => remoteParticipants.find((p) => p.isScreenSharing)?.id ?? null,
+    [remoteParticipants]
+  );
+  // 다른 사람이 공유 중이면 내 공유 버튼 비활성화
+  const someoneElseSharing = !!screenSharingPeerId;
 
   const allParticipants = useMemo(
     () => isScreenSharing ? [...participants, SCREEN_SHARE_PARTICIPANT] : participants,
@@ -156,32 +211,68 @@ export default function VideoRoom({
   );
 
   const [mainParticipantId, setMainParticipantId] = useState("me");
-  const [stripOrder, setStripOrder] = useState<string[]>([]);
+  const mainParticipantIdRef = useRef("me");
+  mainParticipantIdRef.current = mainParticipantId;
+  const remoteParticipantsRef = useRef<Participant[]>([]);
+  remoteParticipantsRef.current = remoteParticipants;
 
-  // 원격 참여자 변경 시 stripOrder 동기화
+  // ── 원격 참여자 화면 공유 시작/종료 → 메인뷰 자동 전환 ──────
+  const prevScreenSharingPeerRef = useRef<string | null>(null);
+  const prevMainBeforeScreenShareRef = useRef<string>("me");
   useEffect(() => {
-    setStripOrder((prev) => {
-      const remoteIds = remoteParticipants.map((p) => p.id);
-      const kept = prev.filter((id) => remoteIds.includes(id));
-      const added = remoteIds.filter((id) => !prev.includes(id));
-      return [...kept, ...added];
-    });
+    if (screenSharingPeerId) {
+      if (!prevScreenSharingPeerRef.current) {
+        // 화면 공유 막 시작 — 이전 메인뷰 저장
+        prevMainBeforeScreenShareRef.current = mainParticipantIdRef.current;
+      }
+      prevScreenSharingPeerRef.current = screenSharingPeerId;
+      setMainParticipantId(screenSharingPeerId);
+    } else if (prevScreenSharingPeerRef.current) {
+      // 화면 공유 종료 — 이전 메인뷰 복원
+      prevScreenSharingPeerRef.current = null;
+      const restored = prevMainBeforeScreenShareRef.current;
+      if (restored === "me") {
+        setMainParticipantId("me");
+      } else {
+        const stillExists = remoteParticipantsRef.current.find((p) => p.id === restored);
+        setMainParticipantId(stillExists ? restored : (remoteParticipantsRef.current[0]?.id ?? "me"));
+      }
+    }
+  }, [screenSharingPeerId]);
+
+  // ── 원격 참여자 입장 시 메인뷰 자동 전환 ────────────────────
+  const prevRemoteCountRef = useRef(0);
+  useEffect(() => {
+    if (remoteParticipants.length > 0 && prevRemoteCountRef.current === 0) {
+      // 첫 번째 원격 참여자 입장 — 현재 "me"가 메인이면 상대방으로 전환
+      if (mainParticipantIdRef.current === "me") {
+        setMainParticipantId(remoteParticipants[0].id);
+      }
+    } else if (remoteParticipants.length === 0 && prevRemoteCountRef.current > 0) {
+      // 모든 원격 참여자 퇴장 — 내 화면으로 복귀
+      setMainParticipantId("me");
+    }
+    prevRemoteCountRef.current = remoteParticipants.length;
   }, [remoteParticipants]);
 
   const mainParticipant = allParticipants.find((p) => p.id === mainParticipantId);
-  const stripParticipants = stripOrder
-    .map((id) => allParticipants.find((p) => p.id === id))
-    .filter((p): p is Participant => !!p);
 
+  // ── 스트립 참여자 목록 ─────────────────────────────────────
+  // 화면 공유가 메인에 있을 때: 모든 카메라를 스트립에 표시
+  // 카메라가 메인에 있을 때: 메인의 참여자는 스트립에서 제외
+  const isMainShowingScreen =
+    mainParticipantId === "screen-share" || mainParticipantId === screenSharingPeerId;
+
+  const stripParticipants = useMemo(() => {
+    const allCameras = [myParticipant, ...remoteParticipants];
+    if (isMainShowingScreen) return allCameras;
+    return allCameras.filter((p) => p.id !== mainParticipantId);
+  }, [myParticipant, remoteParticipants, mainParticipantId, isMainShowingScreen]);
+
+  // 스트립 타일 더블클릭 → 해당 참여자를 메인뷰로
   const handleSelectParticipant = useCallback((selectedId: string) => {
-    setStripOrder((prev) => {
-      const idx = prev.indexOf(selectedId);
-      const next = [...prev];
-      next[idx] = mainParticipantId;
-      return next;
-    });
     setMainParticipantId(selectedId);
-  }, [mainParticipantId]);
+  }, []);
 
   const stopScreenShare = useCallback(() => {
     setScreenStream((prev) => {
@@ -189,12 +280,7 @@ export default function VideoRoom({
       return null;
     });
     setIsScreenSharing(false);
-    setMainParticipantId((prev) => {
-      if (prev !== "screen-share") return prev;
-      setStripOrder((s) => s.filter((id) => id !== "screen-share"));
-      return "me";
-    });
-    setStripOrder((prev) => prev.filter((id) => id !== "screen-share"));
+    setMainParticipantId(remoteParticipantsRef.current[0]?.id ?? "me");
   }, []);
 
   const handleToggleScreenShare = useCallback(async () => {
@@ -202,20 +288,20 @@ export default function VideoRoom({
       stopScreenShare();
       return;
     }
+    if (someoneElseSharing) return;
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       setScreenStream(stream);
       setIsScreenSharing(true);
-      setStripOrder((prev) => [mainParticipantId, ...prev]);
       setMainParticipantId("screen-share");
       stream.getVideoTracks()[0]?.addEventListener("ended", stopScreenShare);
     } catch {
       // 사용자가 취소한 경우
     }
-  }, [isScreenSharing, mainParticipantId, stopScreenShare]);
+  }, [isScreenSharing, someoneElseSharing, stopScreenShare]);
 
   const effectiveSpeakingId =
-    isMicOn && myIsSpeaking ? "me" : (speakingParticipant?.id ?? "");
+    isMicOn && myIsSpeaking ? "me" : remoteSpeakingId;
 
   // ── 컨트롤바 자동숨김 ────────────────────────────────────
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -279,7 +365,13 @@ export default function VideoRoom({
     socketSendMessage(message);
   }, [user, socketSendMessage]);
 
-  const handleEndCall = useCallback(() => router.push("/call"), [router]);
+  const handleEndCall = useCallback(() => {
+    cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
+    cameraStreamRef.current = null;
+    cleanupAudio();
+    screenStream?.getTracks().forEach((t) => t.stop());
+    router.push("/call");
+  }, [router, cleanupAudio, screenStream]);
 
   const handleSaveSettings = useCallback((data: { roomName: string; isPrivate: boolean; code: string }) => {
     setCurrentRoomTitle(data.roomName);
@@ -288,9 +380,10 @@ export default function VideoRoom({
   }, []);
 
   // ── MediaPipe 수어 인식 ───────────────────────────────────
-  const { transcript: slttTranscript, isDetecting } = useSignLanguage(
+  const { isDetecting, isLoading: isMediaPipeLoading } = useSignLanguage(
     cameraStream,
-    isSubtitlesOn && isCameraOn
+    isSubtitlesOn && isCameraOn,
+    sendFrame
   );
 
   const subtitleBottom = controlsVisible ? 88 : 16;
@@ -300,7 +393,7 @@ export default function VideoRoom({
       ? isMicOn && myIsSpeaking
       : mainParticipantId === "screen-share"
       ? false
-      : mainParticipantId === speakingParticipant?.id;
+      : mainParticipantId === remoteSpeakingId;
 
   // ── 메인 비디오 콘텐츠 ────────────────────────────────────
   const renderMainVideo = () => {
@@ -308,6 +401,7 @@ export default function VideoRoom({
       return (
         <StreamVideo
           stream={screenStream}
+          muted
           className="absolute inset-0 w-full h-full object-contain"
         />
       );
@@ -317,31 +411,38 @@ export default function VideoRoom({
         <StreamVideo
           stream={cameraStream}
           mirrored
+          muted
           className="absolute inset-0 w-full h-full object-cover"
         />
       );
     }
     // 원격 참여자 스트림
     const remotePeer = remoteParticipants.find((p) => p.id === mainParticipantId);
-    if (remotePeer?.stream) {
+    // 화면 공유 중이면 screenStream 우선 표시
+    if (remotePeer?.isScreenSharing && remotePeer.screenStream) {
+      return (
+        <StreamVideo
+          stream={remotePeer.screenStream}
+          className="absolute inset-0 w-full h-full object-contain bg-black"
+        />
+      );
+    }
+    if (remotePeer?.stream && !remotePeer.isCameraOff) {
       return (
         <StreamVideo
           stream={remotePeer.stream}
+          muted
           className="absolute inset-0 w-full h-full object-cover"
         />
       );
     }
+    // 카메라 꺼짐 상태 — 스트립 타일과 동일한 회색 아바타
     return (
-      <div
-        className="w-full h-full"
-        style={{ background: "linear-gradient(180deg, #0d1b2a 0%, #1a2d1a 50%, #0d1b0d 100%)" }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-32 h-32 rounded-full bg-white/5 flex items-center justify-center">
-            <span className="text-6xl text-white/20 font-light">
-              {mainParticipant?.name[0] ?? "?"}
-            </span>
-          </div>
+      <div className="w-full h-full flex items-center justify-center bg-[#2a2a2a]">
+        <div className="w-24 h-24 rounded-full bg-[#3a3a3a] flex items-center justify-center">
+          <span className="text-4xl text-white font-semibold">
+            {mainParticipant?.name[0] ?? "?"}
+          </span>
         </div>
       </div>
     );
@@ -349,6 +450,11 @@ export default function VideoRoom({
 
   return (
     <div className="flex flex-col w-screen h-screen bg-black overflow-hidden relative">
+      {/* 원격 참여자 오디오 — 카메라 상태와 무관하게 항상 재생 */}
+      {remoteParticipants.filter((p) => p.stream).map((p) => (
+        <RemoteAudio key={p.id} stream={p.stream!} />
+      ))}
+
       {showMeetingNotice && (
         <MeetingNotesPanel
           isHost={false}
@@ -357,14 +463,23 @@ export default function VideoRoom({
         />
       )}
 
-      <ParticipantStrip
-        participants={stripParticipants}
-        speakingId={effectiveSpeakingId}
-        onSelectParticipant={handleSelectParticipant}
-        myStream={cameraStream}
-        isCameraOn={isCameraOn}
-        screenStream={screenStream}
-      />
+      {stripParticipants.length === 0 ? (
+        <div className="flex items-center justify-center bg-black px-4 py-5 h-[154px]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-7 h-7 border-2 border-[#724BFD] border-t-transparent rounded-full animate-spin" />
+            <span className="text-white/50 text-[13px]">상대방 연결 대기 중...</span>
+          </div>
+        </div>
+      ) : (
+        <ParticipantStrip
+          participants={stripParticipants}
+          speakingId={effectiveSpeakingId}
+          onSelectParticipant={handleSelectParticipant}
+          myStream={cameraStream}
+          isCameraOn={isCameraOn}
+          screenStream={screenStream}
+        />
+      )}
 
       <div
         className="relative flex-1 overflow-hidden bg-black"
@@ -373,10 +488,25 @@ export default function VideoRoom({
         <div className="flex h-full gap-2 px-3 pt-2">
           <div className="flex-1 flex items-center justify-center">
             <div className={`shrink-0 rounded-[14px] transition-shadow duration-150 ${
-              isMainSpeaking ? "ring-4 ring-[#4CAF50]" : ""
+              isMainSpeaking ? "ring-4 ring-[#724BFD]" : ""
             }`}>
               <div className="relative w-[983px] h-[509px] shrink-0 rounded-[12px] overflow-hidden bg-[#111]">
                 {renderMainVideo()}
+
+                {/* 닉네임 + 마이크 꺼짐 오버레이 */}
+                {mainParticipant && mainParticipantId !== "screen-share" && (
+                  <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10">
+                    {mainParticipant.isMuted && (
+                      <MicOff size={14} className="text-[#FF4444] shrink-0" />
+                    )}
+                    <span className="text-white text-[13px] font-medium truncate">
+                      {mainParticipant.name}
+                      {mainParticipant.isHost && (
+                        <span className="text-[#AAAAAA] ml-1">(방장)</span>
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 {isSubtitlesOn && (
                   <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
@@ -385,12 +515,19 @@ export default function VideoRoom({
                       자막 ON
                     </div>
                     {isCameraOn && (
-                      <div className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full ${
-                        isDetecting ? "bg-[#4CAF50]/80 text-white" : "bg-black/50 text-white/60"
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${isDetecting ? "bg-white animate-pulse" : "bg-white/40"}`} />
-                        {isDetecting ? "손 감지됨" : "손 미감지"}
-                      </div>
+                      isMediaPipeLoading ? (
+                        <div className="flex items-center gap-1 bg-black/50 text-white/60 text-[10px] font-medium px-2 py-1 rounded-full">
+                          <span className="w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
+                          모델 로딩 중...
+                        </div>
+                      ) : (
+                        <div className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full ${
+                          isDetecting ? "bg-[#4CAF50]/80 text-white" : "bg-black/50 text-white/60"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isDetecting ? "bg-white animate-pulse" : "bg-white/40"}`} />
+                          {isDetecting ? "손 감지됨" : "손 미감지"}
+                        </div>
+                      )
                     )}
                   </div>
                 )}
@@ -423,10 +560,12 @@ export default function VideoRoom({
           className="absolute left-0 right-0 flex justify-center pointer-events-none z-30"
           style={{ bottom: subtitleBottom, transition: "bottom 0.3s ease" }}
         >
-          {isSubtitlesOn && slttTranscript && (
+          {isSubtitlesOn && captionLine && (
             <div className="w-[983px] max-w-full flex flex-col gap-1 px-4">
               <p className="text-white text-[12px] font-medium bg-black/50 px-3 py-1.5 rounded-[6px] leading-relaxed">
-                {slttTranscript}
+                <span className="font-bold text-[#724BFD]">{captionLine.name}</span>
+                {" : "}
+                {captionLine.text}
               </p>
             </div>
           )}
@@ -442,6 +581,7 @@ export default function VideoRoom({
             isScreenSharing={isScreenSharing}
             isSubtitlesOn={isSubtitlesOn}
             activePanel={activePanel}
+            someoneElseSharing={someoneElseSharing}
             onToggleMic={() => setIsMicOn((v) => !v)}
             onToggleCamera={() => setIsCameraOn((v) => !v)}
             onToggleScreenShare={handleToggleScreenShare}

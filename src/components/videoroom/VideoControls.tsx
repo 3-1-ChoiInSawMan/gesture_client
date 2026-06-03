@@ -19,6 +19,7 @@ interface VideoControlsProps {
   isScreenSharing: boolean;
   isSubtitlesOn: boolean;
   activePanel: string | null;
+  someoneElseSharing?: boolean;
   onToggleMic: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
@@ -38,10 +39,13 @@ interface ControlButtonProps {
   /** 장치가 꺼진 상태 (마이크 꺼짐, 카메라 꺼짐) — 빨간색 */
   off?: boolean;
   danger?: boolean;
+  disabled?: boolean;
 }
 
-function ControlButton({ icon, label, onClick, active, off, danger }: ControlButtonProps) {
-  const bgClass = danger
+function ControlButton({ icon, label, onClick, active, off, danger, disabled }: ControlButtonProps) {
+  const bgClass = disabled
+    ? "opacity-30 cursor-not-allowed"
+    : danger
     ? "bg-[#FF4444] hover:bg-[#e03030]"
     : off
     ? "bg-[#FF4444]/20 hover:bg-[#FF4444]/30"
@@ -67,7 +71,7 @@ function ControlButton({ icon, label, onClick, active, off, danger }: ControlBut
 
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       title={label}
       className={`flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] transition-colors ${bgClass}`}
     >
@@ -83,6 +87,7 @@ export default function VideoControls({
   isScreenSharing,
   isSubtitlesOn,
   activePanel,
+  someoneElseSharing,
   onToggleMic,
   onToggleCamera,
   onToggleScreenShare,
@@ -113,9 +118,10 @@ export default function VideoControls({
         />
         <ControlButton
           icon={<Monitor size={22} />}
-          label="화면 공유"
+          label={someoneElseSharing && !isScreenSharing ? "공유 중" : "화면 공유"}
           onClick={onToggleScreenShare}
           active={isScreenSharing}
+          disabled={someoneElseSharing && !isScreenSharing}
         />
         <ControlButton
           icon={<Captions size={22} />}

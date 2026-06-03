@@ -33,29 +33,32 @@ function ParticipantTile({
 }) {
   const showMyCamera = participant.id === "me" && isCameraOn && myStream;
   const showScreenShare = participant.id === "screen-share" && screenStream;
-  const showRemoteStream = participant.id !== "me" && participant.id !== "screen-share" && !!participant.stream;
+  const showRemoteStream = participant.id !== "me" && participant.id !== "screen-share" && !!participant.stream && !participant.isCameraOff;
 
   return (
     <div
       onDoubleClick={onDoubleClick}
       className={`relative shrink-0 w-[260px] h-[142px] rounded-[8px] overflow-hidden bg-[#2a2a2a] cursor-pointer ${
-        isSpeaking ? "ring-2 ring-[#4CAF50]" : ""
+        isSpeaking ? "ring-2 ring-[#724BFD]" : ""
       }`}
     >
       {showScreenShare ? (
         <StreamVideo
           stream={screenStream}
+          muted
           className="w-full h-full object-contain bg-black"
         />
       ) : showMyCamera ? (
         <StreamVideo
           stream={myStream}
           mirrored
+          muted
           className="w-full h-full object-cover"
         />
       ) : showRemoteStream ? (
         <StreamVideo
           stream={participant.stream!}
+          muted
           className="w-full h-full object-cover"
         />
       ) : participant.isCameraOff ? (

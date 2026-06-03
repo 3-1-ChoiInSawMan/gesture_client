@@ -28,7 +28,7 @@ export function useChatSocket(
       typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
     const origin = getWsOrigin();
 
-    const socket = io(`${origin}/ws/chat`, {
+    const socket = io(origin, {
       auth: { token: token ?? "" },
       transports: ["websocket"],
     });
@@ -61,7 +61,9 @@ export function useChatSocket(
     });
 
     return () => {
-      socket.emit("leave_room", { call_room_id: roomId });
+      if (socket.connected) {
+        socket.emit("leave_room", { call_room_id: roomId });
+      }
       socket.disconnect();
       socketRef.current = null;
     };

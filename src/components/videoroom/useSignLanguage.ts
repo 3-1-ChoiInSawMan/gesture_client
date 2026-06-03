@@ -2,32 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 
-interface SignFrame {
-  left_hand: [number, number][] | null;
-  right_hand: [number, number][] | null;
-  left_shoulder: [number, number];
-  right_shoulder: [number, number];
-}
-
 type Landmark = { x: number; y: number; z: number; visibility?: number };
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_SLTT_WS_URL ?? "ws://localhost:8000/calls";
+/** 손 미감지 시 채울 플레이스홀더 (21 랜드마크 × 2 = 42개) */
+const MISSING_HAND = new Array(42).fill(0);
+/** 한 번에 전송할 프레임 수 */
+const FRAME_BUFFER_SIZE = 30;
+
+function flattenHand(lms?: Landmark[]): number[] {
+  if (!lms || lms.length === 0) return MISSING_HAND;
+  return lms.flatMap((lm) => [lm.x, lm.y]);
+}
 
 const MEDIAPIPE_VERSION = "0.5.1675471629";
 
 export function useSignLanguage(
   stream: MediaStream | null,
-  enabled: boolean
-): { transcript: string; isDetecting: boolean } {
-  const [transcript, setTranscript] = useState("");
+  enabled: boolean,
+  onBatch?: (frames: number[][]) => void
+): { isDetecting: boolean; isLoading: boolean } {
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const holisticRef = useRef<{ send: (i: { image: HTMLVideoElement }) => Promise<void>; onResults: (cb: (r: any) => void) => void; setOptions: (o: object) => void; close?: () => void } | null>(null);
+  const holisticRef = useRef<{ send: (i: { image: HTMLVideoElement }) => Promise<void>; onResults: (cb: (r: any) => void) => void; setOptions: (o: object) => void; initialize?: () => Promise<void>; close?: () => void } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const keypointBufferRef = useRef<number[][]>([]);
   const rafRef = useRef<number | null>(null);
   const processingRef = useRef(false);
+  const onBatchRef = useRef(onBatch);
+  onBatchRef.current = onBatch;
 
   useEffect(() => {
     if (!enabled || !stream) return;
@@ -35,7 +38,6 @@ export function useSignLanguage(
     let destroyed = false;
 
     const init = async () => {
-      // SSR 안전한 dynamic import
       const { Holistic } = await import("@mediapipe/holistic");
       if (destroyed) return;
 
@@ -56,17 +58,7 @@ export function useSignLanguage(
       }
       if (destroyed) return;
 
-      // WebSocket
-      const ws = new WebSocket(WS_URL);
-      ws.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data as string);
-          if (typeof data.text === "string") setTranscript(data.text);
-        } catch {}
-      };
-      wsRef.current = ws;
-
-      // MediaPipe Holistic 초기화 (모델 파일은 CDN)
+      // MediaPipe Holistic 초기화
       const holistic = new Holistic({
         locateFile: (file: string) =>
           `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@${MEDIAPIPE_VERSION}/${file}`,
@@ -93,27 +85,34 @@ export function useSignLanguage(
           (results.rightHandLandmarks?.length ?? 0) > 0;
         setIsDetecting(handDetected);
 
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-        const extractHand = (lms?: Landmark[]): [number, number][] | null => {
-          if (!lms || lms.length === 0) return null;
-          return lms.map((lm) => [lm.x, lm.y]);
-        };
-
         const pose = results.poseLandmarks;
-        const frame: SignFrame = {
-          left_hand: extractHand(results.leftHandLandmarks),
-          right_hand: extractHand(results.rightHandLandmarks),
-          left_shoulder: pose ? [pose[11].x, pose[11].y] : [0, 0],
-          right_shoulder: pose ? [pose[12].x, pose[12].y] : [0, 0],
-        };
+        const frameKP: number[] = [
+          ...flattenHand(results.leftHandLandmarks),
+          ...flattenHand(results.rightHandLandmarks),
+          ...(pose
+            ? [pose[11].x, pose[11].y, pose[12].x, pose[12].y]
+            : [0, 0, 0, 0]),
+        ];
+        keypointBufferRef.current.push(frameKP);
 
-        wsRef.current.send(JSON.stringify(frame));
+        if (keypointBufferRef.current.length >= FRAME_BUFFER_SIZE) {
+          const batch = keypointBufferRef.current.splice(0, FRAME_BUFFER_SIZE);
+          onBatchRef.current?.(batch);
+        }
       });
 
       holisticRef.current = holistic;
 
-      // requestAnimationFrame 루프 — 이전 프레임 처리 중엔 스킵
+      // 모델 파일 CDN 다운로드 (첫 실행 시 수십 초 소요될 수 있음)
+      setIsLoading(true);
+      try {
+        if (holistic.initialize) await holistic.initialize();
+      } catch {
+        // initialize() 미지원 시 무시 — 첫 send() 호출 때 자동 로드
+      }
+      if (destroyed) return;
+      setIsLoading(false);
+
       const tick = async () => {
         if (
           !processingRef.current &&
@@ -138,15 +137,16 @@ export function useSignLanguage(
       processingRef.current = false;
       holisticRef.current?.close?.();
       holisticRef.current = null;
-      wsRef.current?.close();
-      wsRef.current = null;
+      keypointBufferRef.current = [];
       if (videoRef.current) {
         videoRef.current.srcObject = null;
         videoRef.current.remove();
         videoRef.current = null;
       }
+      setIsLoading(false);
+      setIsDetecting(false);
     };
   }, [enabled, stream]);
 
-  return { transcript, isDetecting };
+  return { isDetecting, isLoading };
 }

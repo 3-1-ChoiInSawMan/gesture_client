@@ -334,9 +334,16 @@ export function useWebRTC(params: {
       const myId = (payload?.sub as string | undefined) ?? userId;
       myIdRef.current = myId;
 
+      // HTTPS(Vercel) 환경: Vercel은 WebSocket 프록시 불가 → polling 트랜스포트 사용
+      // HTTP 로컬 개발: WebSocket 직접 연결
+      const transports =
+        typeof window !== "undefined" && window.location.protocol === "https:"
+          ? ["polling"]
+          : ["websocket"];
+
       const socket = io(getSocketUrl(), {
         auth: { token: token ?? "" },
-        transports: ["websocket"],
+        transports,
       });
       socketRef.current = socket;
 

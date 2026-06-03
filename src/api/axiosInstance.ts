@@ -75,12 +75,30 @@ api.interceptors.response.use(
       console.error(`[API ${status ?? "ERR"}] ${method} ${url} →`, message, error.response?.data ?? "");
     }
 
-    // 인증 엔드포인트이거나, 토큰 만료가 아니거나, 이미 재시도한 요청이면 그냥 에러 반환
-    if (
-      AUTH_SKIP.some((path) => url.includes(path)) ||
-      !isTokenExpired(status, message) ||
-      original._retry
-    ) {
+    // 인증 엔드포인트는 토큰 갱신 로직 스킵
+    if (AUTH_SKIP.some((path) => url.includes(path))) {
+      return Promise.reject(error);
+    }
+
+    // 토큰 만료 계열 에러가 아니면 그냥 반환
+    if (!isTokenExpired(status, message)) {
+      return Promise.reject(error);
+    }
+
+    // 로컬스토리지에 accessToken 자체가 없으면 → 미로그인 상태
+    const hasToken =
+      typeof window !== "undefined" && !!localStorage.getItem("accessToken");
+
+    if (!hasToken) {
+      toast.error("로그인이 필요합니다.");
+      if (typeof window !== "undefined") {
+        window.location.href = "/auth/login";
+      }
+      return Promise.reject(error);
+    }
+
+    // 이미 재시도한 요청이면 반환
+    if (original._retry) {
       return Promise.reject(error);
     }
 
@@ -122,12 +140,13 @@ api.interceptors.response.use(
     } catch (err) {
       drainQueue(err);
       console.error("[Auth] 리프레시 토큰 갱신 실패:", err);
-      // 리프레쉬도 실패 → 세션 만료 처리
+      // 리프레쉬도 실패 → 토큰 만료 처리
+      toast.error("토큰이 만료되었습니다. 다시 로그인해 주세요.");
       if (typeof window !== "undefined") {
         localStorage.removeItem("accessToken");
         localStorage.removeItem("auth-storage");
         deleteCookie("refreshToken");
-        window.location.href = "/auth/login?expired=1";
+        window.location.href = "/auth/login";
       }
       return Promise.reject(err);
     } finally {

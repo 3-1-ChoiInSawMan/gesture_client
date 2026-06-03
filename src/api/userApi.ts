@@ -40,7 +40,8 @@ export const userApi = {
 
   getUser: async (userId: string): Promise<UserProfile> => {
     const { data } = await api.get(`/users/${userId}`);
-    return data.data as UserProfile;
+    const body = data?.data?.user ?? data?.user ?? data?.data ?? data;
+    return body as UserProfile;
   },
 
   searchUser: async (userId: string): Promise<UserProfile[]> => {

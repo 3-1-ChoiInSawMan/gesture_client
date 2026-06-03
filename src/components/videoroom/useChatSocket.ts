@@ -32,9 +32,16 @@ export function useChatSocket(
       typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
     const origin = getWsOrigin();
 
+    // HTTPS(Vercel) 환경: Vercel은 WebSocket 프록시 불가 → polling 트랜스포트 사용
+    // HTTP 로컬 개발: WebSocket 직접 연결
+    const transports =
+      typeof window !== "undefined" && window.location.protocol === "https:"
+        ? ["polling"]
+        : ["websocket"];
+
     const socket = io(origin, {
       auth: { token: token ?? "" },
-      transports: ["websocket"],
+      transports,
     });
 
     socketRef.current = socket;

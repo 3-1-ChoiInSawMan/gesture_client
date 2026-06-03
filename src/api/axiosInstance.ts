@@ -5,7 +5,16 @@ import { getCookie, setCookie, deleteCookie } from "@/lib/cookie";
 // 인증 자체 엔드포인트는 토큰 갱신 로직에서 제외
 const AUTH_SKIP = ["/auth/login", "/auth/register", "/auth/email-send", "/auth/email-verification", "/auth/refresh"];
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+// HTTPS 배포 환경에서는 Mixed Content 방지를 위해 상대경로 사용 (Vercel rewrite 경유)
+// HTTP 로컬 개발에서는 NEXT_PUBLIC_API_URL 직접 사용
+function resolveBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    return "/api/v1";
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "";
+}
+
+const BASE_URL = resolveBaseUrl();
 
 export const api = axios.create({
   baseURL: BASE_URL,

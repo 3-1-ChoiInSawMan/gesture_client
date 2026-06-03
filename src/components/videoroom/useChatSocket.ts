@@ -5,6 +5,10 @@ import { io, Socket } from "socket.io-client";
 import { ChatMessage } from "./types";
 
 function getWsOrigin(): string {
+  // HTTPS 환경: 같은 origin으로 연결 → Vercel rewrite가 socket.io를 백엔드로 프록시
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    return window.location.origin;
+  }
   const base = process.env.NEXT_PUBLIC_API_URL ?? "";
   try {
     return new URL(base).origin;

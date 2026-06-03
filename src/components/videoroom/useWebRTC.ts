@@ -11,6 +11,10 @@ const RAW_URL =
   process.env.NEXT_PUBLIC_WEBRTC_WS_URL ?? "ws://3.35.173.178:8080/calls";
 
 function getSocketUrl(): string {
+  // HTTPS 환경: Mixed Content 방지 — 같은 origin + /calls namespace (Vercel rewrite 경유)
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    return `${window.location.origin}/calls`;
+  }
   return RAW_URL.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
 }
 
@@ -36,7 +40,7 @@ async function getFreshToken(): Promise<string | null> {
   if (!refreshToken) return token;
 
   try {
-    const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const BASE_URL = window.location.protocol === "https:" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL ?? "");
     const { data } = await axios.get(`${BASE_URL}/auth/refresh`, {
       headers: { Authorization: `Bearer ${refreshToken}` },
     });

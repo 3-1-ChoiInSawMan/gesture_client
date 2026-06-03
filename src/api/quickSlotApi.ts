@@ -12,15 +12,23 @@ export interface QuickSlot {
 
 export const quickSlotApi = {
   getAll: async (): Promise<QuickAction[]> => {
-    const { data } = await api.get("/quick-slots");
-    const body = data.data ?? data;
-    return (body?.quickActions ?? []) as QuickAction[];
+    try {
+      const { data } = await api.get("/quick-slots");
+      const body = data.data ?? data;
+      return (body?.quickActions ?? []) as QuickAction[];
+    } catch {
+      return [];
+    }
   },
 
   getMy: async (): Promise<(QuickSlot | null)[]> => {
-    const { data } = await api.get("/quick-slots/me");
-    const body = data.data ?? data;
-    return (body?.quickSlots ?? []) as (QuickSlot | null)[];
+    try {
+      const { data } = await api.get("/quick-slots/me");
+      const body = data.data ?? data;
+      return (body?.quickSlots ?? []) as (QuickSlot | null)[];
+    } catch {
+      return [];
+    }
   },
 
   update: async (slots: ({ actionName: string; mediaUrl: string } | null)[]): Promise<void> => {

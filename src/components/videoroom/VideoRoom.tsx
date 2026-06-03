@@ -380,9 +380,11 @@ export default function VideoRoom({
   }, []);
 
   // ── MediaPipe 수어 인식 ───────────────────────────────────
+  // 카메라 ON이면 자막 토글 여부와 무관하게 MediaPipe 실행 + AI 프레임 전송
+  // 자막 토글은 오버레이 표시 여부만 제어
   const { isDetecting, isLoading: isMediaPipeLoading } = useSignLanguage(
     cameraStream,
-    isSubtitlesOn && isCameraOn,
+    isCameraOn,
     sendFrame
   );
 

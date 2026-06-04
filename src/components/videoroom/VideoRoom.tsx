@@ -365,44 +365,44 @@ export default function VideoRoom({
     socketSendMessage(message);
   }, [user, socketSendMessage]);
 
-  const handleEndCall = useCallback(async () => {
-    // 통화방 나가기 API 호출 (실패해도 무시하고 이동)
-    try {
-      await callRoomApi.leaveRoom(roomId);
-    } catch {
-      // 이미 나간 상태거나 방이 없는 경우 무시
-    }
+  // 중복 호출 방지 플래그
+  const leaveCalledRef = useRef(false);
+
+  const sendLeaveBeacon = useCallback(() => {
+    if (leaveCalledRef.current) return;
+    leaveCalledRef.current = true;
+    const token = localStorage.getItem("accessToken");
+    if (!token) return;
+    const baseUrl =
+      window.location.protocol === "https:"
+        ? "/api/v1"
+        : (process.env.NEXT_PUBLIC_API_URL ?? "");
+    fetch(`${baseUrl}/call-rooms/${roomId}/leave`, {
+      method: "DELETE",
+      keepalive: true,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    }).catch(() => {});
+  }, [roomId]);
+
+  const handleEndCall = useCallback(() => {
+    sendLeaveBeacon();
     cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
     cleanupAudio();
     screenStream?.getTracks().forEach((t) => t.stop());
     sessionStorage.removeItem("currentRoomId");
     router.push("/call");
-  }, [router, cleanupAudio, screenStream, roomId]);
+  }, [router, cleanupAudio, screenStream, sendLeaveBeacon]);
 
   // 브라우저 닫기/새로고침 시 통화방 나가기
   useEffect(() => {
-    const sendLeave = () => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-      if (!token) return;
-      const baseUrl =
-        window.location.protocol === "https:"
-          ? "/api/v1"
-          : (process.env.NEXT_PUBLIC_API_URL ?? "");
-      fetch(`${baseUrl}/call-rooms/${roomId}/leave`, {
-        method: "DELETE",
-        keepalive: true,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      }).catch(() => {});
-    };
-
-    window.addEventListener("pagehide", sendLeave);
-    window.addEventListener("beforeunload", sendLeave);
+    window.addEventListener("pagehide", sendLeaveBeacon);
+    window.addEventListener("beforeunload", sendLeaveBeacon);
     return () => {
-      window.removeEventListener("pagehide", sendLeave);
-      window.removeEventListener("beforeunload", sendLeave);
+      window.removeEventListener("pagehide", sendLeaveBeacon);
+      window.removeEventListener("beforeunload", sendLeaveBeacon);
     };
-  }, [roomId]);
+  }, [sendLeaveBeacon]);
 
   const handleSaveSettings = useCallback((data: { roomName: string; isPrivate: boolean; code: string }) => {
     setCurrentRoomTitle(data.roomName);

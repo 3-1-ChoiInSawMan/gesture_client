@@ -111,8 +111,9 @@ export function useWebRTC(params: {
   isSpeaking?: boolean;
   onCaption?: (name: string, text: string) => void;
   onTranslation?: (text: string) => void;
+  onRoomDeleted?: () => void;
 }) {
-  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onTranslation } = params;
+  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onTranslation, onRoomDeleted } = params;
   const [remoteParticipants, setRemoteParticipants] = useState<Participant[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
@@ -134,6 +135,8 @@ export function useWebRTC(params: {
   onCaptionRef.current = onCaption;
   const onTranslationRef = useRef<typeof onTranslation>(onTranslation);
   onTranslationRef.current = onTranslation;
+  const onRoomDeletedRef = useRef<typeof onRoomDeleted>(onRoomDeleted);
+  onRoomDeletedRef.current = onRoomDeleted;
 
   const roomIdx = Number(roomId);
 
@@ -257,10 +260,8 @@ export function useWebRTC(params: {
 
       pc.onconnectionstatechange = () => {
         console.log("[WebRTC] connection", peerId, "→", pc.connectionState);
-        if (
-          pc.connectionState === "failed" ||
-          pc.connectionState === "disconnected"
-        ) {
+        // "disconnected"는 일시적 상태 — 제거하면 복구 불가능해지므로 "failed"만 처리
+        if (pc.connectionState === "failed") {
           peersRef.current.delete(peerId);
           setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
         }
@@ -709,8 +710,11 @@ export function useWebRTC(params: {
       });
 
       // 수어 자막 번역 결과
+      // 내 것인지 판단은 VideoRoom의 onTranslation 콜백에서 isDetecting 기반으로 처리
       socket.on("translation", (data: { text?: string }) => {
-        if (data.text) onTranslationRef.current?.(data.text);
+        if (data.text) {
+          onTranslationRef.current?.(data.text);
+        }
       });
 
       // 참여자 퇴장
@@ -723,6 +727,11 @@ export function useWebRTC(params: {
           peersRef.current.delete(peerId);
         }
         setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
+      });
+
+      // 방 삭제 (방장이 방을 삭제했을 때 서버가 방 전체에 브로드캐스트)
+      socket.on("room_deleted", () => {
+        onRoomDeletedRef.current?.();
       });
     }); // getFreshToken().then
 

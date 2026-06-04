@@ -244,6 +244,8 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
 
       const roomId = result.roomId ?? result.roomIdx;
       if (roomId != null) {
+        // 방 생성자 표시: sendLeaveBeacon에서 삭제 vs 나가기 결정에 사용
+        localStorage.setItem("host_call_room_id", String(roomId));
         sessionStorage.setItem("currentRoomId", String(roomId));
         router.push("/room");
       }

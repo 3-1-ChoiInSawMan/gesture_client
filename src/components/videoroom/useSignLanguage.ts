@@ -11,7 +11,7 @@ const FRAME_BUFFER_SIZE = 30;
 
 function flattenHand(lms?: Landmark[]): number[] {
   if (!lms || lms.length === 0) return MISSING_HAND;
-  return lms.flatMap((lm) => [lm.x, lm.y]);
+  return lms.flatMap((lm) => [1 - lm.x, lm.y]);
 }
 
 const MEDIAPIPE_VERSION = "0.5.1675471629";
@@ -90,7 +90,7 @@ export function useSignLanguage(
           ...flattenHand(results.leftHandLandmarks),
           ...flattenHand(results.rightHandLandmarks),
           ...(pose
-            ? [pose[11].x, pose[11].y, pose[12].x, pose[12].y]
+            ? [1 - pose[11].x, pose[11].y, 1 - pose[12].x, pose[12].y]
             : [0, 0, 0, 0]),
         ];
         keypointBufferRef.current.push(frameKP);

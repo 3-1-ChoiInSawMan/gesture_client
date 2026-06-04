@@ -136,6 +136,11 @@ export default function CallRoomSection({
       // 409: 이미 참여 중 → 그냥 입장
     }
     sessionStorage.setItem("currentRoomId", String(selectedRoom.id));
+    // 내가 만든 방이 아닌 곳에 참여할 때 host_call_room_id 초기화
+    // (이전에 만든 방 ID가 우연히 일치해 deleteRoom이 호출되는 것 방지)
+    if (localStorage.getItem("host_call_room_id") !== String(selectedRoom.id)) {
+      localStorage.removeItem("host_call_room_id");
+    }
     router.push("/room");
     setSelectedRoom(null);
     setJoining(false);

@@ -109,13 +109,8 @@ export const callRoomApi = {
       `/call-rooms/${roomId}/join`,
       password ? { password } : undefined
     );
-    console.log("[joinRoom] response data:", JSON.stringify(data));
-    // 서버가 HTTP 200으로 실패를 반환하는 경우 처리
-    // success 필드가 명시적으로 true가 아니거나 false인 경우 모두 체크
-    const isFailure =
-      data?.success === false ||
-      String(data?.success) === "false" ||
-      (data?.statusCode && data.statusCode !== "ROOM_003" && !String(data.statusCode).startsWith("200"));
+    // 서버가 HTTP 200으로 실패를 반환하는 경우 처리 (success: false)
+    const isFailure = data?.success === false || String(data?.success) === "false";
     if (isFailure) {
       const statusCode: string = data?.statusCode ?? "";
       // ROOM_003: 이미 참여 중 → 정상 입장 처리

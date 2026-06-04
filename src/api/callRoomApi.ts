@@ -24,6 +24,7 @@ export interface CreateRoomRequest {
   maxParticipant: number;
   isPublic: boolean;
   category: "BASIC" | "MEETING" | "STUDY";
+  password?: string;
   thumbnailUrl?: string;
 }
 
@@ -92,6 +93,7 @@ export const callRoomApi = {
       isPublic: body.isPublic,
       category: body.category,
     };
+    if (!body.isPublic && body.password) payload.password = body.password;
     if (body.thumbnailUrl) payload.thumbnailUrl = body.thumbnailUrl;
     const { data } = await api.post("/call-rooms", payload);
     const room = data?.data?.room ?? data?.data ?? data;
@@ -103,10 +105,22 @@ export const callRoomApi = {
     roomId: string | number,
     password?: string
   ): Promise<void> => {
-    await api.post(
+    const { data } = await api.post(
       `/call-rooms/${roomId}/join`,
       password ? { password } : undefined
     );
+    // 서버가 HTTP 200으로 실패를 반환하는 경우 처리
+    if (data?.success === false) {
+      const statusCode: string = data?.statusCode ?? "";
+      // ROOM_003: 이미 참여 중 → 정상 입장 처리
+      if (statusCode === "ROOM_003") return;
+      // 그 외 실패 (비밀번호 오류 등) → 에러로 변환
+      const message: string = data?.message ?? "통화방 참여에 실패했습니다.";
+      const err = Object.assign(new Error(message), {
+        response: { status: 400, data: { message } },
+      });
+      throw err;
+    }
   },
 
   updateRoom: async (

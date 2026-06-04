@@ -159,11 +159,27 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
   const [visibility, setVisibility] = useState<"공개" | "비공개">("공개");
   const [roomType, setRoomType] = useState<RoomType>("회의방");
   const [maxParticipants, setMaxParticipants] = useState(10);
+  const [pwDigits, setPwDigits] = useState(["", "", "", ""]);
+  const pwRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePwChange = (i: number, value: string) => {
+    if (!/^\d?$/.test(value)) return;
+    const next = [...pwDigits];
+    next[i] = value;
+    setPwDigits(next);
+    if (value && i < 3) pwRefs.current[i + 1]?.focus();
+  };
+
+  const handlePwKeyDown = (i: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !pwDigits[i] && i > 0) {
+      pwRefs.current[i - 1]?.focus();
+    }
+  };
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -200,6 +216,10 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
       toast.error("방 설명을 입력해주세요.");
       return;
     }
+    if (visibility === "비공개" && pwDigits.some((d) => !d)) {
+      toast.error("비밀번호 4자리를 모두 입력해주세요.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -214,6 +234,7 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
         maxParticipant: maxParticipants,
         isPublic: visibility === "공개",
         category: CATEGORY_MAP[roomType],
+        ...(visibility === "비공개" ? { password: pwDigits.join("") } : {}),
         ...(thumbnailUrl ? { thumbnailUrl } : {}),
       });
 
@@ -265,6 +286,7 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
             </label>
             <input
               type="text"
+              autoComplete="off"
               placeholder="방 이름"
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
@@ -279,6 +301,7 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
             </label>
             <input
               type="text"
+              autoComplete="off"
               placeholder="방에 대한 간단한 설명을 입력해주세요"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -292,7 +315,7 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
               <label className="text-[13px] font-semibold text-[#333]">
                 공개 범위 설정 <span className="text-[#F85858]">*</span>
               </label>
-              <VisibilityToggle value={visibility} onChange={setVisibility} />
+              <VisibilityToggle value={visibility} onChange={(v) => { setVisibility(v); setPwDigits(["", "", "", ""]); }} />
             </div>
             <div className="flex flex-col gap-2 w-[230px]">
               <label className="text-[13px] font-semibold text-[#333]">
@@ -302,16 +325,41 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
             </div>
           </div>
 
-          {/* 최대 인원 */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[13px] font-semibold text-[#333]">
-              최대 인원 수 <span className="text-[#F85858]">*</span>
-            </label>
-            <ParticipantCounter
-              value={maxParticipants}
-              onDecrease={() => setMaxParticipants((p) => Math.max(2, p - 1))}
-              onIncrease={() => setMaxParticipants((p) => Math.min(100, p + 1))}
-            />
+          {/* 최대 인원 + 비밀번호 (비공개 시) */}
+          <div className="flex items-end">
+            <div className="flex flex-col gap-2 w-[260px]">
+              <label className="text-[13px] font-semibold text-[#333]">
+                최대 인원 수 <span className="text-[#F85858]">*</span>
+              </label>
+              <ParticipantCounter
+                value={maxParticipants}
+                onDecrease={() => setMaxParticipants((p) => Math.max(2, p - 1))}
+                onIncrease={() => setMaxParticipants((p) => Math.min(100, p + 1))}
+              />
+            </div>
+            {visibility === "비공개" && (
+              <div className="flex flex-col gap-2">
+                <label className="text-[13px] font-semibold text-[#333]">
+                  비밀번호 <span className="text-[#F85858]">*</span>
+                </label>
+                <div className="flex gap-2">
+                  {pwDigits.map((digit, i) => (
+                    <input
+                      key={i}
+                      ref={(el) => { pwRefs.current[i] = el; }}
+                      type="text"
+                      autoComplete="off"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handlePwChange(i, e.target.value)}
+                      onKeyDown={(e) => handlePwKeyDown(i, e)}
+                      className="w-[36px] h-[36px] border border-[rgba(51,51,51,0.3)] rounded-[10px] text-center text-[16px] font-semibold text-[#333] outline-none focus:border-[#724BFD] transition-colors"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 버튼 */}

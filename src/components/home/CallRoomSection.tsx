@@ -299,6 +299,7 @@ export default function CallRoomSection({
           roomTitle={selectedRoom.title}
           onClose={() => setSelectedRoom(null)}
           onJoin={(code) => handleJoin(code)}
+          loading={joining}
         />
       )}
     </div>

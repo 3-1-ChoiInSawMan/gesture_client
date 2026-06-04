@@ -178,6 +178,7 @@ export default function CallRoomFullView({ title, onClose, username }: Props) {
           roomTitle={selectedRoom.title}
           onClose={() => setSelectedRoom(null)}
           onJoin={(code) => handleJoin(code)}
+          loading={joining}
         />
       )}
     </div>

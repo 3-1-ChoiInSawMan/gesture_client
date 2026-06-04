@@ -17,7 +17,7 @@ export default function useAuth() {
   const { setUser, clearUser } = useAuthStore();
   const router = useRouter();
 
-  const login = async ({ id, password }: LoginData) => {
+  const login = async ({ id, password }: LoginData): Promise<string | null> => {
     setLoading(true);
     try {
       const result = await authApi.login({ email: id, password });
@@ -32,11 +32,13 @@ export default function useAuth() {
       });
       toast.success("로그인에 성공했습니다.");
       router.push("/");
+      return null;
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "로그인에 실패했습니다.";
+          ?.message ?? "이메일 또는 비밀번호를 확인해주세요.";
       toast.error(message);
+      return message;
     } finally {
       setLoading(false);
     }

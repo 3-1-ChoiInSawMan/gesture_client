@@ -7,12 +7,14 @@ interface JoinPrivateRoomModalProps {
   roomTitle: string;
   onClose: () => void;
   onJoin: (code: string) => void;
+  loading?: boolean;
 }
 
 export default function JoinPrivateRoomModal({
   roomTitle,
   onClose,
   onJoin,
+  loading = false,
 }: JoinPrivateRoomModalProps) {
   const [digits, setDigits] = useState(["", "", "", ""]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -92,15 +94,17 @@ export default function JoinPrivateRoomModal({
           <div className="flex gap-4">
             <button
               onClick={onClose}
-              className="flex-1 h-[42px] bg-[#F3F4F6] text-[#333] text-[14px] font-medium rounded-[10px] hover:bg-[#E9EAEC] transition-colors"
+              disabled={loading}
+              className="flex-1 h-[42px] bg-[#F3F4F6] text-[#333] text-[14px] font-medium rounded-[10px] hover:bg-[#E9EAEC] transition-colors disabled:opacity-40"
             >
               취소
             </button>
             <button
               onClick={handleJoin}
-              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors"
+              disabled={loading}
+              className="flex-1 h-[42px] bg-[#724BFD] text-white text-[14px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors disabled:opacity-40"
             >
-              참여
+              {loading ? "참여 중..." : "참여"}
             </button>
           </div>
         </div>

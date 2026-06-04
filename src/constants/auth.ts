@@ -1,9 +1,9 @@
 export const loginInputFields = [
   {
-    label: "이메일 또는 아이디",
+    label: "이메일",
     name: "id",
-    placeholder: "이메일 또는 아이디",
-    type: "text",
+    placeholder: "이메일을 입력하세요",
+    type: "email",
   },
   {
     label: "비밀번호",

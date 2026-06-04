@@ -71,9 +71,12 @@ api.interceptors.response.use(
     const method = (original?.method ?? "").toUpperCase();
     const message = error.response?.data?.message ?? error.message ?? "Unknown error";
 
-    if (status !== 409) {
-      console.error(`[API ${status ?? "ERR"}] ${method} ${url} →`, message, error.response?.data ?? "");
+    // 409 Conflict: 이미 참여 중 등 — 호출자가 직접 처리, 인터셉터 개입 없음
+    if (status === 409) {
+      return Promise.reject(error);
     }
+
+    console.error(`[API ${status ?? "ERR"}] ${method} ${url} →`, message, error.response?.data ?? "");
 
     // 인증 엔드포인트는 토큰 갱신 로직 스킵
     if (AUTH_SKIP.some((path) => url.includes(path))) {

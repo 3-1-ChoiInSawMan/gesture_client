@@ -146,14 +146,84 @@ export function useWebRTC(params: {
     try {
       const profile = await userApi.getUser(String(userIdx));
       const result = {
-        name: profile.nickname || profile.id || `사용자 ${userIdx}`,
+        name: profile.nickname || profile.id || `User ${userIdx}`,
         username: profile.id || profile.userId || String(userIdx),
       };
       profileCache.current.set(userIdx, result);
       return result;
     } catch {
-      return { name: `사용자 ${userIdx}`, username: String(userIdx) };
+      return { name: `User ${userIdx}`, username: String(userIdx) };
     }
+  }, []);
+
+  const closePeer = useCallback((peerId: string) => {
+    const entry = peersRef.current.get(peerId);
+    if (entry) {
+      entry.pc.close();
+      peersRef.current.delete(peerId);
+    }
+    setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
+  }, []);
+
+  const closeAllPeers = useCallback(() => {
+    peersRef.current.forEach(({ pc }) => pc.close());
+    peersRef.current.clear();
+  }, []);
+
+  const closeStalePeersForUser = useCallback((userIdx: number, keepPeerId: string) => {
+    const stalePeerIds: string[] = [];
+    peersRef.current.forEach((entry, oldId) => {
+      if (entry.userIdx === userIdx && oldId !== keepPeerId) {
+        entry.pc.close();
+        peersRef.current.delete(oldId);
+        stalePeerIds.push(oldId);
+      }
+    });
+    if (stalePeerIds.length > 0) {
+      setRemoteParticipants((prev) =>
+        prev.filter((p) => !stalePeerIds.includes(p.id))
+      );
+    }
+  }, []);
+
+  const upsertRemoteParticipant = useCallback((
+    peerId: string,
+    profile: { name: string; username: string },
+    userIdx?: number,
+    patch: Partial<Participant> = {}
+  ) => {
+    setRemoteParticipants((prev) => {
+      const withoutStale =
+        userIdx !== undefined
+          ? prev.filter((p) => p.userIdx !== userIdx || p.id === peerId)
+          : prev;
+      const existing = withoutStale.find((p) => p.id === peerId);
+      if (existing) {
+        return withoutStale.map((p) =>
+          p.id === peerId
+            ? {
+                ...p,
+                ...patch,
+                name: profile.name,
+                username: profile.username,
+                userIdx: userIdx ?? p.userIdx,
+              }
+            : p
+        );
+      }
+      return [
+        ...withoutStale,
+        {
+          id: peerId,
+          name: profile.name,
+          username: profile.username,
+          userIdx,
+          isCameraOff: true,
+          isMuted: true,
+          ...patch,
+        },
+      ];
+    });
   }, []);
 
   /**
@@ -262,14 +332,13 @@ export function useWebRTC(params: {
         console.log("[WebRTC] connection", peerId, "→", pc.connectionState);
         // "disconnected"는 일시적 상태 — 제거하면 복구 불가능해지므로 "failed"만 처리
         if (pc.connectionState === "failed") {
-          peersRef.current.delete(peerId);
-          setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
+          closePeer(peerId);
         }
       };
 
       return pc;
     },
-    [roomIdx]
+    [closePeer, roomIdx]
   );
 
   // 카메라/마이크/화면공유 on/off 시 각 sender에 replaceTrack (재협상 불필요)
@@ -408,42 +477,26 @@ export function useWebRTC(params: {
           if (!peerId) return;
 
           if (data.userIdx !== undefined) {
-            peersRef.current.forEach((entry, oldId) => {
-              if (entry.userIdx === data.userIdx && oldId !== peerId) {
-                entry.pc.close();
-                peersRef.current.delete(oldId);
-              }
-            });
+            closeStalePeersForUser(data.userIdx, peerId);
           }
 
           // 기존 peer면 프로필만 업데이트
           const existingEntry = peersRef.current.get(peerId);
           if (existingEntry) {
-            existingEntry.userIdx = data.userIdx;
+            if (data.userIdx !== undefined) existingEntry.userIdx = data.userIdx;
+            const knownUserIdx = data.userIdx ?? existingEntry.userIdx;
             const profile =
-              data.userIdx !== undefined
-                ? await getProfile(data.userIdx)
+              knownUserIdx !== undefined
+                ? await getProfile(knownUserIdx)
                 : { name: peerId, username: peerId };
-            setRemoteParticipants((prev) => {
-              const withoutStale =
-                data.userIdx !== undefined
-                  ? prev.filter(
-                      (p) => p.userIdx !== data.userIdx || p.id === peerId
-                    )
-                  : prev;
-              return withoutStale.map((p) =>
-                p.id === peerId
-                  ? { ...p, name: profile.name, username: profile.username, userIdx: data.userIdx }
-                  : p
-              );
-            });
+            upsertRemoteParticipant(peerId, profile, knownUserIdx);
             return;
           }
 
           // peer를 await 전에 먼저 생성 — ICE 후보 도착 시 drop 방지
           const pc = createPeer(peerId);
           const entry = peersRef.current.get(peerId)!;
-          entry.userIdx = data.userIdx;
+          if (data.userIdx !== undefined) entry.userIdx = data.userIdx;
 
           // video(카메라) / audio / video(화면공유) 트랜시버를 초기에 모두 추가
           // → SDP에 m= 라인 3개 포함 → 재협상 없이 replaceTrack만으로 화면공유 가능
@@ -491,28 +544,7 @@ export function useWebRTC(params: {
               ? await getProfile(data.userIdx)
               : { name: peerId, username: peerId };
 
-          setRemoteParticipants((prev) => {
-            const withoutStale =
-              data.userIdx !== undefined
-                ? prev.filter((p) => p.userIdx !== data.userIdx)
-                : prev;
-            if (withoutStale.find((p) => p.id === peerId)) {
-              return withoutStale.map((p) =>
-                p.id === peerId ? { ...p, name: profile.name, username: profile.username } : p
-              );
-            }
-            return [
-              ...withoutStale,
-              {
-                id: peerId,
-                name: profile.name,
-                username: profile.username,
-                userIdx: data.userIdx,
-                isCameraOff: true,
-                isMuted: true,
-              },
-            ];
-          });
+          upsertRemoteParticipant(peerId, profile, data.userIdx);
         }
       );
 
@@ -529,12 +561,7 @@ export function useWebRTC(params: {
           const userIdx = data.fromUserIdx;
 
           if (userIdx !== undefined) {
-            peersRef.current.forEach((entry, oldId) => {
-              if (entry.userIdx === userIdx && oldId !== peerId) {
-                entry.pc.close();
-                peersRef.current.delete(oldId);
-              }
-            });
+            closeStalePeersForUser(userIdx, peerId);
           }
 
           // peer를 await 전에 즉시 생성 — offerer ICE 후보가 수십ms 내에 도착하므로 drop 방지
@@ -542,28 +569,12 @@ export function useWebRTC(params: {
           if (!pc) {
             pc = createPeer(peerId);
             // 닉네임은 나중에 업데이트 — 일단 placeholder로 추가
-            setRemoteParticipants((prev) => {
-              const withoutStale =
-                userIdx !== undefined
-                  ? prev.filter((p) => p.userIdx !== userIdx)
-                  : prev;
-              if (withoutStale.find((p) => p.id === peerId)) return withoutStale;
-              return [
-                ...withoutStale,
-                {
-                  id: peerId,
-                  name: peerId,
-                  username: peerId,
-                  userIdx,
-                  isCameraOff: true,
-                  isMuted: true,
-                },
-              ];
-            });
+            upsertRemoteParticipant(peerId, { name: peerId, username: peerId }, userIdx);
           }
 
           const entry = peersRef.current.get(peerId)!;
-          entry.userIdx = userIdx;
+          if (userIdx !== undefined) entry.userIdx = userIdx;
+          const knownUserIdx = userIdx ?? entry.userIdx;
 
           // answerer는 ondatachannel로 DataChannel 수신
           pc.ondatachannel = (e) => setupDC(e.channel, peerId);
@@ -616,12 +627,8 @@ export function useWebRTC(params: {
 
           // 프로필(닉네임+아이디)은 WebRTC 협상 완료 후 fetch
           const profile =
-            userIdx !== undefined ? await getProfile(userIdx) : { name: peerId, username: peerId };
-          setRemoteParticipants((prev) =>
-            prev.map((p) =>
-              p.id === peerId ? { ...p, name: profile.name, username: profile.username, userIdx } : p
-            )
-          );
+            knownUserIdx !== undefined ? await getProfile(knownUserIdx) : { name: peerId, username: peerId };
+          upsertRemoteParticipant(peerId, profile, knownUserIdx);
         }
       );
 
@@ -721,12 +728,7 @@ export function useWebRTC(params: {
       socket.on("leave", (data: { socketId?: string }) => {
         const peerId = data.socketId;
         if (!peerId) return;
-        const peer = peersRef.current.get(peerId);
-        if (peer) {
-          peer.pc.close();
-          peersRef.current.delete(peerId);
-        }
-        setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
+        closePeer(peerId);
       });
 
       // 방 삭제 (방장이 방을 삭제했을 때 서버가 방 전체에 브로드캐스트)
@@ -743,8 +745,7 @@ export function useWebRTC(params: {
         s.disconnect();
         socketRef.current = null;
       }
-      peersRef.current.forEach(({ pc }) => pc.close());
-      peersRef.current.clear();
+      closeAllPeers();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId]);

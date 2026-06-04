@@ -5,6 +5,10 @@ import { getCookie, setCookie, deleteCookie } from "@/lib/cookie";
 // 인증 자체 엔드포인트는 토큰 갱신 로직에서 제외
 const AUTH_SKIP = ["/auth/login", "/auth/register", "/auth/email-send", "/auth/email-verification", "/auth/refresh"];
 
+// 비즈니스 도메인 엔드포인트: 401/403 에러를 토큰 만료로 오해하지 않도록 갱신 로직 스킵
+// (예: 비공개 통화방 비밀번호 오류 → 403 or 401, 토큰과 무관)
+const DOMAIN_SKIP = ["/call-rooms"];
+
 // HTTPS 배포 환경에서는 Mixed Content 방지를 위해 상대경로 사용 (Vercel rewrite 경유)
 // HTTP 로컬 개발에서는 NEXT_PUBLIC_API_URL 직접 사용
 function resolveBaseUrl(): string {
@@ -80,6 +84,11 @@ api.interceptors.response.use(
 
     // 인증 엔드포인트는 토큰 갱신 로직 스킵
     if (AUTH_SKIP.some((path) => url.includes(path))) {
+      return Promise.reject(error);
+    }
+
+    // 비즈니스 도메인 엔드포인트: 401/403이어도 토큰 갱신 시도 없이 caller에게 넘김
+    if (DOMAIN_SKIP.some((path) => url.includes(path))) {
       return Promise.reject(error);
     }
 

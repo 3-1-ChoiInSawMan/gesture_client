@@ -48,19 +48,21 @@ const drainQueue = (err: unknown, token?: string) => {
 };
 
 // 토큰 만료 여부 판단
-// - 401: 표준 미인증
-// - 403: 백엔드가 만료 시 403을 반환하는 경우, 메시지로 구분
-const isTokenExpired = (status: number, message: string) => {
+// statusCode가 있으면 우선 체크 — 비즈니스 에러(USER_XXX, ROOM_XXX 등)는 토큰 만료 아님
+// statusCode가 없거나 AUTH 계열일 때만 status/message로 판단
+const isTokenExpired = (status: number, message: string, statusCode?: string) => {
+  // 비즈니스 에러 코드가 있으면 토큰 만료 아님
+  if (statusCode && !statusCode.startsWith("AUTH_") && statusCode !== "SC_000") {
+    return false;
+  }
   if (status === 401) return true;
   if (status === 403) {
     const lower = message.toLowerCase();
-    // 실제 권한 없음(forbidden)과 토큰 만료를 메시지로 구분
     return (
       lower.includes("token") ||
       lower.includes("expired") ||
       lower.includes("jwt") ||
-      lower.includes("만료") ||
-      lower.includes("unauthorized")
+      lower.includes("만료")
     );
   }
   return false;
@@ -93,7 +95,8 @@ api.interceptors.response.use(
     }
 
     // 토큰 만료 계열 에러가 아니면 그냥 반환
-    if (!isTokenExpired(status, message)) {
+    const statusCode: string | undefined = error.response?.data?.statusCode;
+    if (!isTokenExpired(status, message, statusCode)) {
       return Promise.reject(error);
     }
 

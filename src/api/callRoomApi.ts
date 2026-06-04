@@ -136,6 +136,10 @@ export const callRoomApi = {
     await api.patch(`/call-rooms/${roomId}`, body);
   },
 
+  leaveRoom: async (roomId: string | number): Promise<void> => {
+    await api.delete(`/call-rooms/${roomId}/leave`);
+  },
+
   deleteRoom: async (roomId: string | number): Promise<void> => {
     await api.delete(`/call-rooms/${roomId}`);
   },

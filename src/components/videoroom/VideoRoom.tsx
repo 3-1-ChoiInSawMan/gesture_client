@@ -367,6 +367,9 @@ export default function VideoRoom({
 
   // 중복 호출 방지 플래그
   const leaveCalledRef = useRef(false);
+  // currentIsHost는 비동기로 세팅되므로 ref로 동기화 (beacon 콜백에서 사용)
+  const isHostRef = useRef(currentIsHost);
+  useEffect(() => { isHostRef.current = currentIsHost; }, [currentIsHost]);
 
   const sendLeaveBeacon = useCallback(() => {
     if (leaveCalledRef.current) return;
@@ -377,7 +380,11 @@ export default function VideoRoom({
       window.location.protocol === "https:"
         ? "/api/v1"
         : (process.env.NEXT_PUBLIC_API_URL ?? "");
-    fetch(`${baseUrl}/call-rooms/${roomId}/leave`, {
+    // 방장이면 방 삭제, 일반 참여자면 나가기
+    const url = isHostRef.current
+      ? `${baseUrl}/call-rooms/${roomId}`
+      : `${baseUrl}/call-rooms/${roomId}/leave`;
+    fetch(url, {
       method: "DELETE",
       keepalive: true,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

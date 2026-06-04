@@ -218,7 +218,14 @@ export default function CallRoomSection({
             </>
           )}
           <button
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => {
+              if (!user) {
+                toast.error("로그인이 필요합니다.");
+                router.push("/auth/login");
+                return;
+              }
+              setIsCreateModalOpen(true);
+            }}
             className="ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#724BFD] text-white text-[13px] font-medium hover:bg-[#5f3de0] transition-colors"
           >
             <Plus size={14} />

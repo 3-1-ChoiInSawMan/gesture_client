@@ -5,7 +5,6 @@ import { io, Socket } from "socket.io-client";
 import axios from "axios";
 import { getCookie, setCookie } from "@/lib/cookie";
 import { userApi } from "@/api/userApi";
-import { callRoomApi } from "@/api/callRoomApi";
 import { Participant } from "./types";
 
 const RAW_URL =
@@ -103,6 +102,13 @@ interface PeerEntry {
   lastRemoteOfferSdp?: string;
   lastRemoteAnswerSdp?: string;
   applyingRemoteAnswer: boolean;
+}
+
+interface CallPeerInfo {
+  socketId?: string;
+  fromSocketId?: string;
+  userIdx?: number;
+  nickname?: string;
 }
 
 export function useWebRTC(params: {
@@ -234,6 +240,38 @@ export function useWebRTC(params: {
       .then((profile) => upsertRemoteParticipant(peerId, profile, userIdx))
       .catch(() => {});
   }, [getProfile, upsertRemoteParticipant]);
+
+  const getSocketProfile = useCallback((peer: CallPeerInfo) => {
+    const peerId = peer.socketId ?? peer.fromSocketId;
+    if (peer.nickname && peer.userIdx !== undefined) {
+      const profile = {
+        name: peer.nickname,
+        username: String(peer.userIdx),
+      };
+      profileCache.current.set(peer.userIdx, profile);
+      return profile;
+    }
+    if (peer.userIdx !== undefined) {
+      return profileCache.current.get(peer.userIdx) ?? {
+        name: `User ${peer.userIdx}`,
+        username: String(peer.userIdx),
+      };
+    }
+    return {
+      name: peerId ?? "Unknown",
+      username: peerId ?? "unknown",
+    };
+  }, []);
+
+  const upsertSocketParticipant = useCallback((
+    peer: CallPeerInfo,
+    patch: Partial<Participant> = {}
+  ) => {
+    const peerId = peer.socketId ?? peer.fromSocketId;
+    if (!peerId || peerId === socketRef.current?.id) return;
+    upsertRemoteParticipant(peerId, getSocketProfile(peer), peer.userIdx, patch);
+    if (!peer.nickname) refreshPeerProfile(peerId, peer.userIdx);
+  }, [getSocketProfile, refreshPeerProfile, upsertRemoteParticipant]);
 
   /**
    * RTCPeerConnection ?앹꽦 諛??대깽???몃뱾?щ쭔 ?ㅼ젙.
@@ -492,6 +530,18 @@ export function useWebRTC(params: {
         };
       };
 
+      const handleExistingParticipants = (payload?: {
+        participants?: CallPeerInfo[];
+        users?: CallPeerInfo[];
+      } | CallPeerInfo[]) => {
+        const participants = Array.isArray(payload)
+          ? payload
+          : payload?.participants ?? payload?.users ?? [];
+        participants.forEach((participant) => {
+          upsertSocketParticipant(participant);
+        });
+      };
+
       socket.on("connect", () => {
         const payload = {
           callRoomIdx: roomIdx,
@@ -510,7 +560,7 @@ export function useWebRTC(params: {
             hasToken: !!payload.token,
           });
         }
-        socket.emit("join_call", payload);
+        socket.emit("join_call", payload, handleExistingParticipants);
       });
 
       socket.on("connect_error", (error) => {
@@ -534,10 +584,14 @@ export function useWebRTC(params: {
         });
       }
 
+      socket.on("existing_participants", handleExistingParticipants);
+      socket.on("participants", handleExistingParticipants);
+      socket.on("call_participants", handleExistingParticipants);
+
       // ??李몄뿬???낆옣 ??offer ?꾩넚 (offerer ??븷)
       socket.on(
         "user_joined",
-        async (data: { socketId?: string; userIdx?: number; nickname?: string }) => {
+        async (data: CallPeerInfo) => {
           const peerId = data.socketId;
           if (!peerId) return;
 
@@ -549,17 +603,9 @@ export function useWebRTC(params: {
           const existingEntry = peersRef.current.get(peerId);
           if (existingEntry) {
             if (data.userIdx !== undefined) existingEntry.userIdx = data.userIdx;
-            const knownUserIdx = data.userIdx ?? existingEntry.userIdx;
-            const profile =
-              data.nickname
-                ? { name: data.nickname, username: String(knownUserIdx ?? peerId) }
-                : knownUserIdx !== undefined
-                ? profileCache.current.get(knownUserIdx) ?? await getProfile(knownUserIdx)
-                : { name: peerId, username: peerId };
-            if (data.nickname && knownUserIdx !== undefined) {
-              profileCache.current.set(knownUserIdx, profile);
-            }
-            upsertRemoteParticipant(peerId, profile, knownUserIdx);
+            upsertSocketParticipant(
+              { ...data, userIdx: data.userIdx ?? existingEntry.userIdx },
+            );
             return;
           }
 
@@ -567,20 +613,7 @@ export function useWebRTC(params: {
           const pc = createPeer(peerId);
           const entry = peersRef.current.get(peerId)!;
           if (data.userIdx !== undefined) entry.userIdx = data.userIdx;
-          const initialProfile =
-            data.nickname
-              ? { name: data.nickname, username: String(data.userIdx ?? peerId) }
-              : data.userIdx !== undefined
-              ? profileCache.current.get(data.userIdx) ?? {
-                  name: `User ${data.userIdx}`,
-                  username: String(data.userIdx),
-                }
-              : { name: peerId, username: peerId };
-          if (data.nickname && data.userIdx !== undefined) {
-            profileCache.current.set(data.userIdx, initialProfile);
-          }
-          upsertRemoteParticipant(peerId, initialProfile, data.userIdx);
-          refreshPeerProfile(peerId, data.userIdx);
+          upsertSocketParticipant(data);
 
           // video(移대찓?? / audio / video(?붾㈃怨듭쑀) ?몃옖?쒕쾭瑜?珥덇린遺??紐⑤몢 異붽?
           const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
@@ -628,11 +661,14 @@ export function useWebRTC(params: {
         async (data: {
           fromSocketId?: string;
           fromUserIdx?: number;
+          fromNickname?: string;
+          nickname?: string;
           sdp?: string;
         }) => {
           const peerId = data.fromSocketId;
           if (!peerId || !data.sdp) return;
           const userIdx = data.fromUserIdx;
+          const nickname = data.fromNickname ?? data.nickname;
 
           if (userIdx !== undefined) {
             closeStalePeersForUser(userIdx, peerId);
@@ -643,7 +679,7 @@ export function useWebRTC(params: {
           if (!pc) {
             pc = createPeer(peerId);
             // ?됰꽕?꾩? ?섏쨷???낅뜲?댄듃 ???쇰떒 placeholder濡?異붽?
-            upsertRemoteParticipant(peerId, { name: peerId, username: peerId }, userIdx);
+            upsertSocketParticipant({ socketId: peerId, userIdx, nickname });
           }
 
           const entry = peersRef.current.get(peerId)!;
@@ -707,7 +743,11 @@ export function useWebRTC(params: {
 
           // ?꾨줈???됰꽕???꾩씠??? WebRTC ?묒긽 ?꾨즺 ??fetch
           const profile =
-            knownUserIdx !== undefined ? await getProfile(knownUserIdx) : { name: peerId, username: peerId };
+            nickname
+              ? getSocketProfile({ socketId: peerId, userIdx: knownUserIdx, nickname })
+              : knownUserIdx !== undefined
+              ? await getProfile(knownUserIdx)
+              : { name: peerId, username: peerId };
           upsertRemoteParticipant(peerId, profile, knownUserIdx);
         }
       );
@@ -718,6 +758,8 @@ export function useWebRTC(params: {
         async (data: {
           fromSocketId?: string;
           fromUserIdx?: number;
+          fromNickname?: string;
+          nickname?: string;
           sdp?: string;
         }) => {
           const peerId = data.fromSocketId;
@@ -739,6 +781,11 @@ export function useWebRTC(params: {
               peer.lastRemoteAnswerSdp = data.sdp;
               console.log("[WebRTC] setRemoteDescription(answer) OK ??signalingState:", peer.pc.signalingState, "iceState:", peer.pc.iceConnectionState);
               peer.readyForRenegotiation = true;
+              upsertSocketParticipant({
+                socketId: peerId,
+                userIdx: data.fromUserIdx,
+                nickname: data.fromNickname ?? data.nickname,
+              });
             } catch (e) {
               console.error("[WebRTC] setRemoteDescription(answer) FAILED:", e);
             } finally {
@@ -830,20 +877,11 @@ export function useWebRTC(params: {
         }
         if (data.userIdx === undefined) return;
         const leftUserIdx = data.userIdx;
-        callRoomApi
-          .getCallParticipants(roomId)
-          .then((call) => {
-            const isStillInCall = call.participants.some(
-              (participant) => participant.userIdx === leftUserIdx
-            );
-            if (isStillInCall) return;
-            const matchedPeerIds: string[] = [];
-            peersRef.current.forEach((entry, id) => {
-              if (entry.userIdx === leftUserIdx) matchedPeerIds.push(id);
-            });
-            matchedPeerIds.forEach(closePeer);
-          })
-          .catch(() => {});
+        const matchedPeerIds: string[] = [];
+        peersRef.current.forEach((entry, id) => {
+          if (entry.userIdx === leftUserIdx) matchedPeerIds.push(id);
+        });
+        matchedPeerIds.forEach(closePeer);
       };
       socket.on("leave", handleUserLeft);
       socket.on("user_left", handleUserLeft);

@@ -5,13 +5,14 @@ import { io, Socket } from "socket.io-client";
 import axios from "axios";
 import { getCookie, setCookie } from "@/lib/cookie";
 import { userApi } from "@/api/userApi";
+import { callRoomApi } from "@/api/callRoomApi";
 import { Participant } from "./types";
 
 const RAW_URL =
   process.env.NEXT_PUBLIC_WEBRTC_WS_URL ?? "ws://3.35.173.178:8080/calls";
 
 function getSocketUrl(): string {
-  // HTTPS 환경: Mixed Content 방지 — 같은 origin + /calls namespace (Vercel rewrite 경유)
+  // HTTPS ?섍꼍: Mixed Content 諛⑹? ??媛숈? origin + /calls namespace (Vercel rewrite 寃쎌쑀)
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
     return `${window.location.origin}/calls`;
   }
@@ -50,12 +51,12 @@ async function getFreshToken(): Promise<string | null> {
     setCookie("refreshToken", newRefresh);
     return newAccess;
   } catch {
-    // refresh 실패 시 기존 토큰으로 시도
+    // refresh ?ㅽ뙣 ??湲곗〈 ?좏겙?쇰줈 ?쒕룄
   }
   return token;
 }
 
-/** ICE gathering 완료까지 대기 (최대 timeoutMs, 기본 5초) */
+/** ICE gathering ?꾨즺源뚯? ?湲?(理쒕? timeoutMs, 湲곕낯 5珥? */
 function waitForIceGathering(pc: RTCPeerConnection, timeoutMs = 5000): Promise<void> {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") { resolve(); return; }
@@ -90,15 +91,18 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 interface PeerEntry {
   pc: RTCPeerConnection;
-  stream: MediaStream;       // 카메라 + 오디오
-  screenStream: MediaStream; // 화면 공유
+  stream: MediaStream;       // 移대찓??+ ?ㅻ뵒??
+  screenStream: MediaStream; // ?붾㈃ 怨듭쑀
   userIdx?: number;
   videoSender?: RTCRtpSender;
   audioSender?: RTCRtpSender;
   screenSender?: RTCRtpSender;
-  dc?: RTCDataChannel;       // P2P 상태 시그널링 (서버 불필요)
-  /** 초기 offer/answer 완료 전까지 onnegotiationneeded 억제 */
+  dc?: RTCDataChannel;       // P2P ?곹깭 ?쒓렇?먮쭅 (?쒕쾭 遺덊븘??
+  /** 珥덇린 offer/answer ?꾨즺 ?꾧퉴吏 onnegotiationneeded ?듭젣 */
   readyForRenegotiation: boolean;
+  lastRemoteOfferSdp?: string;
+  lastRemoteAnswerSdp?: string;
+  applyingRemoteAnswer: boolean;
 }
 
 export function useWebRTC(params: {
@@ -110,10 +114,11 @@ export function useWebRTC(params: {
   screenStream?: MediaStream | null;
   isSpeaking?: boolean;
   onCaption?: (name: string, text: string) => void;
+  onSpeechCaption?: (name: string, text: string) => void;
   onTranslation?: (text: string) => void;
   onRoomDeleted?: () => void;
 }) {
-  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onTranslation, onRoomDeleted } = params;
+  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onSpeechCaption, onTranslation, onRoomDeleted } = params;
   const [remoteParticipants, setRemoteParticipants] = useState<Participant[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
@@ -129,10 +134,14 @@ export function useWebRTC(params: {
   screenStreamRef.current = screenStream ?? null;
   const isSpeakingRef = useRef<boolean>(false);
   isSpeakingRef.current = isSpeaking ?? false;
+  const isMicOnRef = useRef<boolean>(false);
+  isMicOnRef.current = !!localAudioStream;
   const nicknameRef = useRef<string>(nickname);
   nicknameRef.current = nickname;
   const onCaptionRef = useRef<typeof onCaption>(onCaption);
   onCaptionRef.current = onCaption;
+  const onSpeechCaptionRef = useRef<typeof onSpeechCaption>(onSpeechCaption);
+  onSpeechCaptionRef.current = onSpeechCaption;
   const onTranslationRef = useRef<typeof onTranslation>(onTranslation);
   onTranslationRef.current = onTranslation;
   const onRoomDeletedRef = useRef<typeof onRoomDeleted>(onRoomDeleted);
@@ -171,19 +180,12 @@ export function useWebRTC(params: {
   }, []);
 
   const closeStalePeersForUser = useCallback((userIdx: number, keepPeerId: string) => {
-    const stalePeerIds: string[] = [];
     peersRef.current.forEach((entry, oldId) => {
       if (entry.userIdx === userIdx && oldId !== keepPeerId) {
         entry.pc.close();
         peersRef.current.delete(oldId);
-        stalePeerIds.push(oldId);
       }
     });
-    if (stalePeerIds.length > 0) {
-      setRemoteParticipants((prev) =>
-        prev.filter((p) => !stalePeerIds.includes(p.id))
-      );
-    }
   }, []);
 
   const upsertRemoteParticipant = useCallback((
@@ -226,9 +228,16 @@ export function useWebRTC(params: {
     });
   }, []);
 
+  const refreshPeerProfile = useCallback((peerId: string, userIdx?: number) => {
+    if (userIdx === undefined) return;
+    getProfile(userIdx)
+      .then((profile) => upsertRemoteParticipant(peerId, profile, userIdx))
+      .catch(() => {});
+  }, [getProfile, upsertRemoteParticipant]);
+
   /**
-   * RTCPeerConnection 생성 및 이벤트 핸들러만 설정.
-   * 트랜시버/트랙 추가는 호출부(offerer/answerer)에서 담당.
+   * RTCPeerConnection ?앹꽦 諛??대깽???몃뱾?щ쭔 ?ㅼ젙.
+   * ?몃옖?쒕쾭/?몃옓 異붽????몄텧遺(offerer/answerer)?먯꽌 ?대떦.
    */
   const createPeer = useCallback(
     (peerId: string): RTCPeerConnection => {
@@ -241,16 +250,17 @@ export function useWebRTC(params: {
         stream: remoteStream,
         screenStream: remoteScreenStream,
         readyForRenegotiation: false,
+        applyingRemoteAnswer: false,
       };
       peersRef.current.set(peerId, entry);
 
       pc.ontrack = (e) => {
         if (e.track.kind === "video") {
-          // 첫 번째 video track = 카메라, 두 번째 = 화면 공유
+          // 泥?踰덉㎏ video track = 移대찓?? ??踰덉㎏ = ?붾㈃ 怨듭쑀
           const isScreenTrack = remoteStream.getVideoTracks().length > 0;
 
           if (!isScreenTrack) {
-            // ── 카메라 트랙 ──
+            // ?? 移대찓???몃옓 ??
             if (!remoteStream.getTrackById(e.track.id)) remoteStream.addTrack(e.track);
             const initiallyMuted = e.track.muted;
             e.track.onmute = () =>
@@ -269,12 +279,12 @@ export function useWebRTC(params: {
               )
             );
           } else {
-            // ── 화면 공유 트랙 ──
-            // isScreenSharing은 screen_share_start/stop 소켓 이벤트로만 제어
-            // (onunmute 기반 감지는 브라우저마다 muted 초기값이 달라 오작동 유발)
+            // ?? ?붾㈃ 怨듭쑀 ?몃옓 ??
+            // isScreenSharing? screen_share_start/stop ?뚯폆 ?대깽?몃줈留??쒖뼱
+            // (onunmute 湲곕컲 媛먯???釉뚮씪?곗?留덈떎 muted 珥덇린媛믪씠 ?щ씪 ?ㅼ옉???좊컻)
             if (!remoteScreenStream.getTrackById(e.track.id))
               remoteScreenStream.addTrack(e.track);
-            // 소켓 이벤트 유실 대비 fallback: 트랙이 mute되면 화면 공유 종료 처리
+            // ?뚯폆 ?대깽???좎떎 ?鍮?fallback: ?몃옓??mute?섎㈃ ?붾㈃ 怨듭쑀 醫낅즺 泥섎━
             e.track.onmute = () =>
               setRemoteParticipants((prev) =>
                 prev.map((p) => (p.id === peerId ? { ...p, isScreenSharing: false } : p))
@@ -286,7 +296,7 @@ export function useWebRTC(params: {
             );
           }
         } else {
-          // ── 오디오 트랙 ──
+          // ?? ?ㅻ뵒???몃옓 ??
           if (!remoteStream.getTrackById(e.track.id)) remoteStream.addTrack(e.track);
           setRemoteParticipants((prev) =>
             prev.map((p) => (p.id === peerId ? { ...p, stream: remoteStream } : p))
@@ -294,7 +304,7 @@ export function useWebRTC(params: {
         }
       };
 
-      // 초기 협상 완료 후 트랙 변경 시 재협상 (화면공유 등)
+      // 珥덇린 ?묒긽 ?꾨즺 ???몃옓 蹂寃????ы삊??(?붾㈃怨듭쑀 ??
       pc.onnegotiationneeded = async () => {
         if (!entry.readyForRenegotiation || pc.signalingState !== "stable") return;
         try {
@@ -314,23 +324,23 @@ export function useWebRTC(params: {
 
       pc.onicecandidate = (e) => {
         if (e.candidate) {
-          console.log("[WebRTC] onicecandidate →", e.candidate.type, e.candidate.candidate?.slice(10, 70));
+          console.log("[WebRTC] onicecandidate", e.candidate.type, e.candidate.candidate?.slice(10, 70));
         } else {
-          console.log("[WebRTC] onicecandidate → null (gathering complete)");
+          console.log("[WebRTC] onicecandidate ??null (gathering complete)");
         }
       };
 
       pc.onicegatheringstatechange = () => {
-        console.log("[WebRTC] ICE gathering", peerId, "→", pc.iceGatheringState);
+        console.log("[WebRTC] ICE gathering", peerId, pc.iceGatheringState);
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log("[WebRTC] ICE connection", peerId, "→", pc.iceConnectionState);
+        console.log("[WebRTC] ICE connection", peerId, pc.iceConnectionState);
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("[WebRTC] connection", peerId, "→", pc.connectionState);
-        // "disconnected"는 일시적 상태 — 제거하면 복구 불가능해지므로 "failed"만 처리
+        console.log("[WebRTC] connection", peerId, pc.connectionState);
+        // "disconnected"???쇱떆???곹깭 ???쒓굅?섎㈃ 蹂듦뎄 遺덇??ν빐吏誘濡?"failed"留?泥섎━
         if (pc.connectionState === "failed") {
           closePeer(peerId);
         }
@@ -341,8 +351,8 @@ export function useWebRTC(params: {
     [closePeer, roomIdx]
   );
 
-  // 카메라/마이크/화면공유 on/off 시 각 sender에 replaceTrack (재협상 불필요)
-  // 트랙이 실제로 바뀐 경우에만 호출 — 불필요한 재전송으로 인한 원격 측 mute/unmute 방지
+  // 移대찓??留덉씠???붾㈃怨듭쑀 on/off ??媛?sender??replaceTrack (?ы삊??遺덊븘??
+  // ?몃옓???ㅼ젣濡?諛붾?寃쎌슦?먮쭔 ?몄텧 ??遺덊븘?뷀븳 ?ъ쟾?≪쑝濡??명븳 ?먭꺽 痢?mute/unmute 諛⑹?
   useEffect(() => {
     const videoTrack = localVideoStream?.getVideoTracks()[0] ?? null;
     const audioTrack = localAudioStream?.getAudioTracks()[0] ?? null;
@@ -358,7 +368,7 @@ export function useWebRTC(params: {
     });
   }, [screenStream, localVideoStream, localAudioStream]);
 
-  // 화면 공유 시작/종료 시 연결된 모든 피어에게 시그널 전송
+  // ?붾㈃ 怨듭쑀 ?쒖옉/醫낅즺 ???곌껐??紐⑤뱺 ?쇱뼱?먭쾶 ?쒓렇???꾩넚
   useEffect(() => {
     const s = socketRef.current;
     if (!s?.connected) return;
@@ -368,7 +378,7 @@ export function useWebRTC(params: {
     });
   }, [screenStream, roomIdx]);
 
-  // 카메라 on/off 시 DataChannel(P2P)로 상태 전송 — 서버 포워딩 불필요
+  // 移대찓??on/off ??DataChannel(P2P)濡??곹깭 ?꾩넚 ???쒕쾭 ?ъ썙??遺덊븘??
   useEffect(() => {
     const msg = JSON.stringify({ type: localVideoStream ? "camera_on" : "camera_off" });
     peersRef.current.forEach((entry) => {
@@ -376,7 +386,14 @@ export function useWebRTC(params: {
     });
   }, [localVideoStream]);
 
-  // 화면 공유 시작/종료 시 DataChannel(P2P)로 상태 전송
+  useEffect(() => {
+    const msg = JSON.stringify({ type: localAudioStream ? "mic_on" : "mic_off" });
+    peersRef.current.forEach((entry) => {
+      if (entry.dc?.readyState === "open") entry.dc.send(msg);
+    });
+  }, [localAudioStream]);
+
+  // ?붾㈃ 怨듭쑀 ?쒖옉/醫낅즺 ??DataChannel(P2P)濡??곹깭 ?꾩넚
   useEffect(() => {
     const msg = JSON.stringify({ type: screenStream ? "screen_on" : "screen_off" });
     peersRef.current.forEach((entry) => {
@@ -384,7 +401,7 @@ export function useWebRTC(params: {
     });
   }, [screenStream]);
 
-  // 발화 상태 변경 시 DataChannel(P2P)로 전송
+  // 諛쒗솕 ?곹깭 蹂寃???DataChannel(P2P)濡??꾩넚
   useEffect(() => {
     const msg = JSON.stringify({ type: isSpeaking ? "speaking_on" : "speaking_off" });
     peersRef.current.forEach((entry) => {
@@ -404,8 +421,8 @@ export function useWebRTC(params: {
       const myId = (payload?.sub as string | undefined) ?? userId;
       myIdRef.current = myId;
 
-      // HTTPS(Vercel) 환경: Vercel은 WebSocket 프록시 불가 → polling 트랜스포트 사용
-      // HTTP 로컬 개발: WebSocket 직접 연결
+      // HTTPS(Vercel) ?섍꼍: Vercel? WebSocket ?꾨줉??遺덇? ??polling ?몃옖?ㅽ룷???ъ슜
+      // HTTP 濡쒖뺄 媛쒕컻: WebSocket 吏곸젒 ?곌껐
       const transports =
         typeof window !== "undefined" && window.location.protocol === "https:"
           ? ["polling"]
@@ -416,16 +433,18 @@ export function useWebRTC(params: {
         transports,
       });
       socketRef.current = socket;
+      const shouldLogSocket = process.env.NODE_ENV !== "production";
 
-      // DataChannel 설정 헬퍼 — 카메라/화면공유 상태를 P2P로 직접 전달 (서버 불필요)
+      // DataChannel ?ㅼ젙 ?ы띁 ??移대찓???붾㈃怨듭쑀 ?곹깭瑜?P2P濡?吏곸젒 ?꾨떖 (?쒕쾭 遺덊븘??
       const setupDC = (dc: RTCDataChannel, peerId: string) => {
         const e = peersRef.current.get(peerId);
         if (e) e.dc = dc;
         dc.onopen = () => {
-          // 연결 시 현재 상태 일괄 전송
-          if (videoStreamRef.current) dc.send(JSON.stringify({ type: "camera_on" }));
-          if (screenStreamRef.current) dc.send(JSON.stringify({ type: "screen_on" }));
-          if (isSpeakingRef.current) dc.send(JSON.stringify({ type: "speaking_on" }));
+          // ?곌껐 ???꾩옱 ?곹깭 ?쇨큵 ?꾩넚
+          dc.send(JSON.stringify({ type: videoStreamRef.current ? "camera_on" : "camera_off" }));
+          dc.send(JSON.stringify({ type: isMicOnRef.current ? "mic_on" : "mic_off" }));
+          dc.send(JSON.stringify({ type: screenStreamRef.current ? "screen_on" : "screen_off" }));
+          dc.send(JSON.stringify({ type: isSpeakingRef.current ? "speaking_on" : "speaking_off" }));
         };
         dc.onmessage = (ev) => {
           try {
@@ -437,6 +456,16 @@ export function useWebRTC(params: {
             } else if (msg.type === "camera_off") {
               setRemoteParticipants((prev) =>
                 prev.map((p) => (p.id === peerId ? { ...p, isCameraOff: true } : p))
+              );
+            } else if (msg.type === "mic_on") {
+              setRemoteParticipants((prev) =>
+                prev.map((p) => (p.id === peerId ? { ...p, isMuted: false } : p))
+              );
+            } else if (msg.type === "mic_off") {
+              setRemoteParticipants((prev) =>
+                prev.map((p) =>
+                  p.id === peerId ? { ...p, isMuted: true, isSpeaking: false } : p
+                )
               );
             } else if (msg.type === "screen_on") {
               setRemoteParticipants((prev) =>
@@ -456,23 +485,59 @@ export function useWebRTC(params: {
               );
             } else if (msg.type === "caption" && typeof msg.text === "string") {
               onCaptionRef.current?.(msg.name ?? peerId, msg.text);
+            } else if (msg.type === "speech_caption" && typeof msg.text === "string") {
+              onSpeechCaptionRef.current?.(msg.name ?? peerId, msg.text);
             }
           } catch {}
         };
       };
 
       socket.on("connect", () => {
-        socket.emit("join_call", {
+        const payload = {
           callRoomIdx: roomIdx,
           userId: myId,
           token: token ?? "",
-        });
+        };
+        if (shouldLogSocket) {
+          console.log("[WebRTC] socket connected:", {
+            id: socket.id,
+            url: getSocketUrl(),
+            roomIdx,
+          });
+          console.log("[WebRTC] emit join_call:", {
+            callRoomIdx: payload.callRoomIdx,
+            userId: payload.userId,
+            hasToken: !!payload.token,
+          });
+        }
+        socket.emit("join_call", payload);
       });
 
-      // 새 참여자 입장 — offer 전송 (offerer 역할)
+      socket.on("connect_error", (error) => {
+        if (shouldLogSocket) {
+          console.error("[WebRTC] socket connect_error:", {
+            message: error.message,
+            data: (error as Error & { data?: unknown }).data,
+          });
+        }
+      });
+
+      socket.on("disconnect", (reason) => {
+        if (shouldLogSocket) {
+          console.warn("[WebRTC] socket disconnected:", reason);
+        }
+      });
+
+      if (shouldLogSocket) {
+        socket.onAny((event, ...args) => {
+          console.log("[WebRTC] socket event:", event, args[0] ?? "");
+        });
+      }
+
+      // ??李몄뿬???낆옣 ??offer ?꾩넚 (offerer ??븷)
       socket.on(
         "user_joined",
-        async (data: { socketId?: string; userIdx?: number }) => {
+        async (data: { socketId?: string; userIdx?: number; nickname?: string }) => {
           const peerId = data.socketId;
           if (!peerId) return;
 
@@ -480,26 +545,44 @@ export function useWebRTC(params: {
             closeStalePeersForUser(data.userIdx, peerId);
           }
 
-          // 기존 peer면 프로필만 업데이트
+          // 湲곗〈 peer硫??꾨줈?꾨쭔 ?낅뜲?댄듃
           const existingEntry = peersRef.current.get(peerId);
           if (existingEntry) {
             if (data.userIdx !== undefined) existingEntry.userIdx = data.userIdx;
             const knownUserIdx = data.userIdx ?? existingEntry.userIdx;
             const profile =
-              knownUserIdx !== undefined
-                ? await getProfile(knownUserIdx)
+              data.nickname
+                ? { name: data.nickname, username: String(knownUserIdx ?? peerId) }
+                : knownUserIdx !== undefined
+                ? profileCache.current.get(knownUserIdx) ?? await getProfile(knownUserIdx)
                 : { name: peerId, username: peerId };
+            if (data.nickname && knownUserIdx !== undefined) {
+              profileCache.current.set(knownUserIdx, profile);
+            }
             upsertRemoteParticipant(peerId, profile, knownUserIdx);
             return;
           }
 
-          // peer를 await 전에 먼저 생성 — ICE 후보 도착 시 drop 방지
+          // peer瑜?await ?꾩뿉 癒쇱? ?앹꽦 ??ICE ?꾨낫 ?꾩갑 ??drop 諛⑹?
           const pc = createPeer(peerId);
           const entry = peersRef.current.get(peerId)!;
           if (data.userIdx !== undefined) entry.userIdx = data.userIdx;
+          const initialProfile =
+            data.nickname
+              ? { name: data.nickname, username: String(data.userIdx ?? peerId) }
+              : data.userIdx !== undefined
+              ? profileCache.current.get(data.userIdx) ?? {
+                  name: `User ${data.userIdx}`,
+                  username: String(data.userIdx),
+                }
+              : { name: peerId, username: peerId };
+          if (data.nickname && data.userIdx !== undefined) {
+            profileCache.current.set(data.userIdx, initialProfile);
+          }
+          upsertRemoteParticipant(peerId, initialProfile, data.userIdx);
+          refreshPeerProfile(peerId, data.userIdx);
 
-          // video(카메라) / audio / video(화면공유) 트랜시버를 초기에 모두 추가
-          // → SDP에 m= 라인 3개 포함 → 재협상 없이 replaceTrack만으로 화면공유 가능
+          // video(移대찓?? / audio / video(?붾㈃怨듭쑀) ?몃옖?쒕쾭瑜?珥덇린遺??紐⑤몢 異붽?
           const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
           const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
           const screenTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
@@ -507,10 +590,10 @@ export function useWebRTC(params: {
           entry.audioSender = audioTransceiver.sender;
           entry.screenSender = screenTransceiver.sender;
 
-          // DataChannel: offer에 포함되어 상대방이 ondatachannel로 수신
+          // DataChannel: offer???ы븿?섏뼱 ?곷?諛⑹씠 ondatachannel濡??섏떊
           setupDC(pc.createDataChannel("state"), peerId);
 
-          // 현재 켜진 트랙이 있으면 즉시 전송
+          // ?꾩옱 耳쒖쭊 ?몃옓???덉쑝硫?利됱떆 ?꾩넚
           const videoTrack = videoStreamRef.current?.getVideoTracks()[0];
           const audioTrack = audioStreamRef.current?.getAudioTracks()[0];
           const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
@@ -518,7 +601,7 @@ export function useWebRTC(params: {
           if (audioTrack) audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
           if (screenTrack) screenTransceiver.sender.replaceTrack(screenTrack).catch(() => {});
 
-          // Non-trickle ICE: gathering 완료 후 모든 candidate가 포함된 SDP 전송
+          // Non-trickle ICE: gathering ?꾨즺 ??紐⑤뱺 candidate媛 ?ы븿??SDP ?꾩넚
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           await waitForIceGathering(pc);
@@ -530,25 +613,16 @@ export function useWebRTC(params: {
             userId: myId,
           });
 
-          // 현재 화면 공유 중이면 새 피어에게도 알림
+          // ?꾩옱 ?붾㈃ 怨듭쑀 以묒씠硫????쇱뼱?먭쾶???뚮┝
           if (screenStreamRef.current) {
             socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
           }
           if (videoStreamRef.current) {
             socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
           }
-
-          // 프로필(닉네임+아이디)은 offer 전송 후 비동기로 fetch
-          const profile =
-            data.userIdx !== undefined
-              ? await getProfile(data.userIdx)
-              : { name: peerId, username: peerId };
-
-          upsertRemoteParticipant(peerId, profile, data.userIdx);
         }
       );
 
-      // offer 수신 → answer 전송 (answerer 역할)
       socket.on(
         "offer",
         async (data: {
@@ -564,11 +638,11 @@ export function useWebRTC(params: {
             closeStalePeersForUser(userIdx, peerId);
           }
 
-          // peer를 await 전에 즉시 생성 — offerer ICE 후보가 수십ms 내에 도착하므로 drop 방지
+          // peer瑜?await ?꾩뿉 利됱떆 ?앹꽦 ??offerer ICE ?꾨낫媛 ?섏떗ms ?댁뿉 ?꾩갑?섎?濡?drop 諛⑹?
           let pc = peersRef.current.get(peerId)?.pc;
           if (!pc) {
             pc = createPeer(peerId);
-            // 닉네임은 나중에 업데이트 — 일단 placeholder로 추가
+            // ?됰꽕?꾩? ?섏쨷???낅뜲?댄듃 ???쇰떒 placeholder濡?異붽?
             upsertRemoteParticipant(peerId, { name: peerId, username: peerId }, userIdx);
           }
 
@@ -576,14 +650,20 @@ export function useWebRTC(params: {
           if (userIdx !== undefined) entry.userIdx = userIdx;
           const knownUserIdx = userIdx ?? entry.userIdx;
 
-          // answerer는 ondatachannel로 DataChannel 수신
+          if (entry.lastRemoteOfferSdp === data.sdp) {
+            console.log("[WebRTC] duplicate offer ignored:", peerId);
+            return;
+          }
+          entry.lastRemoteOfferSdp = data.sdp;
+
+          // answerer??ondatachannel濡?DataChannel ?섏떊
           pc.ondatachannel = (e) => setupDC(e.channel, peerId);
 
-          // setRemoteDescription도 닉네임 fetch 전에 수행 — ICE 후보 버퍼링 가능하게
+          // setRemoteDescription???됰꽕??fetch ?꾩뿉 ?섑뻾 ??ICE ?꾨낫 踰꾪띁留?媛?ν븯寃?
           await pc.setRemoteDescription({ type: "offer", sdp: data.sdp });
 
-          // offerer의 트랜시버에서 sender 추출 + direction을 sendrecv로 명시
-          // video 순서: 첫 번째 = 카메라, 두 번째 = 화면공유
+          // offerer???몃옖?쒕쾭?먯꽌 sender 異붿텧 + direction??sendrecv濡?紐낆떆
+          // video ?쒖꽌: 泥?踰덉㎏ = 移대찓?? ??踰덉㎏ = ?붾㈃怨듭쑀
           const videoTransceivers: RTCRtpTransceiver[] = [];
           for (const transceiver of pc.getTransceivers()) {
             transceiver.direction = "sendrecv";
@@ -606,7 +686,7 @@ export function useWebRTC(params: {
           const answer = await pc.createAnswer();
           console.log("[WebRTC] answer video dir:", answer.sdp?.match(/m=video[\s\S]*?a=(sendrecv|recvonly|sendonly|inactive)/)?.[1]);
           await pc.setLocalDescription(answer);
-          // Non-trickle ICE: gathering 완료 후 모든 candidate가 포함된 SDP 전송
+          // Non-trickle ICE: gathering ?꾨즺 ??紐⑤뱺 candidate媛 ?ы븿??SDP ?꾩넚
           await waitForIceGathering(pc);
           console.log("[WebRTC] answer gathered, sending complete SDP");
           socket.emit("answer", {
@@ -617,7 +697,7 @@ export function useWebRTC(params: {
           });
           entry.readyForRenegotiation = true;
 
-          // 현재 화면 공유/카메라 상태를 오퍼러에게도 알림
+          // ?꾩옱 ?붾㈃ 怨듭쑀/移대찓???곹깭瑜??ㅽ띁?ъ뿉寃뚮룄 ?뚮┝
           if (screenStreamRef.current) {
             socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
           }
@@ -625,14 +705,14 @@ export function useWebRTC(params: {
             socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
           }
 
-          // 프로필(닉네임+아이디)은 WebRTC 협상 완료 후 fetch
+          // ?꾨줈???됰꽕???꾩씠??? WebRTC ?묒긽 ?꾨즺 ??fetch
           const profile =
             knownUserIdx !== undefined ? await getProfile(knownUserIdx) : { name: peerId, username: peerId };
           upsertRemoteParticipant(peerId, profile, knownUserIdx);
         }
       );
 
-      // answer 수신 → 초기 협상 완료
+      // answer ?섏떊 ??珥덇린 ?묒긽 ?꾨즺
       socket.on(
         "answer",
         async (data: {
@@ -641,16 +721,28 @@ export function useWebRTC(params: {
           sdp?: string;
         }) => {
           const peerId = data.fromSocketId;
-          console.log("[WebRTC] answer event — fromSocketId:", peerId, "| peer exists:", !!peersRef.current.get(peerId!));
+          console.log("[WebRTC] answer event ??fromSocketId:", peerId, "| peer exists:", !!peersRef.current.get(peerId!));
           if (!peerId || !data.sdp) return;
           const peer = peersRef.current.get(peerId);
           if (peer) {
+            if (
+              peer.lastRemoteAnswerSdp === data.sdp ||
+              peer.applyingRemoteAnswer ||
+              peer.pc.signalingState !== "have-local-offer"
+            ) {
+              console.log("[WebRTC] answer ignored:", peerId, peer.pc.signalingState);
+              return;
+            }
+            peer.applyingRemoteAnswer = true;
             try {
               await peer.pc.setRemoteDescription({ type: "answer", sdp: data.sdp });
-              console.log("[WebRTC] setRemoteDescription(answer) OK — signalingState:", peer.pc.signalingState, "iceState:", peer.pc.iceConnectionState);
+              peer.lastRemoteAnswerSdp = data.sdp;
+              console.log("[WebRTC] setRemoteDescription(answer) OK ??signalingState:", peer.pc.signalingState, "iceState:", peer.pc.iceConnectionState);
               peer.readyForRenegotiation = true;
             } catch (e) {
               console.error("[WebRTC] setRemoteDescription(answer) FAILED:", e);
+            } finally {
+              peer.applyingRemoteAnswer = false;
             }
           } else {
             console.warn("[WebRTC] answer received but no peer found for", peerId);
@@ -658,10 +750,8 @@ export function useWebRTC(params: {
         }
       );
 
-      // ICE candidate 수신 (서버가 trickle ICE를 지원할 경우 사용)
-      socket.on(
-        "candidate",
-        async (data: {
+      // ICE candidate ?섏떊 (?쒕쾭媛 trickle ICE瑜?吏?먰븷 寃쎌슦 ?ъ슜)
+      const handleIceCandidate = async (data: {
           fromSocketId?: string;
           candidate?: string;
           sdpMid?: string | null;
@@ -679,10 +769,11 @@ export function useWebRTC(params: {
               })
               .catch(() => {});
           }
-        }
-      );
+        };
+      socket.on("candidate", handleIceCandidate);
+      socket.on("ice_candidate", handleIceCandidate);
 
-      // 화면 공유 시작/종료 수신
+      // ?붾㈃ 怨듭쑀 ?쒖옉/醫낅즺 ?섏떊
       socket.on("screen_share_start", (data: { fromSocketId?: string }) => {
         const peerId = data.fromSocketId;
         if (!peerId) return;
@@ -699,7 +790,7 @@ export function useWebRTC(params: {
         );
       });
 
-      // 카메라 on/off 수신
+      // 移대찓??on/off ?섏떊
       socket.on("camera_on", (data: { fromSocketId?: string }) => {
         const peerId = data.fromSocketId;
         if (!peerId) return;
@@ -716,22 +807,48 @@ export function useWebRTC(params: {
         );
       });
 
-      // 수어 자막 번역 결과
-      // 내 것인지 판단은 VideoRoom의 onTranslation 콜백에서 isDetecting 기반으로 처리
-      socket.on("translation", (data: { text?: string }) => {
+      // ?섏뼱 ?먮쭑 踰덉뿭 寃곌낵
+      // ??寃껋씤吏 ?먮떒? VideoRoom??onTranslation 肄쒕갚?먯꽌 isDetecting 湲곕컲?쇰줈 泥섎━
+      const handleTranslation = (data: { text?: string }) => {
         if (data.text) {
           onTranslationRef.current?.(data.text);
         }
-      });
+      };
+      socket.on("translation", handleTranslation);
+      socket.on("frame_translation", handleTranslation);
 
-      // 참여자 퇴장
-      socket.on("leave", (data: { socketId?: string }) => {
-        const peerId = data.socketId;
-        if (!peerId) return;
-        closePeer(peerId);
-      });
+      // 李몄뿬???댁옣
+      const handleUserLeft = (data: {
+        socketId?: string;
+        fromSocketId?: string;
+        userIdx?: number;
+      }) => {
+        const peerId = data.socketId ?? data.fromSocketId;
+        if (peerId) {
+          closePeer(peerId);
+          return;
+        }
+        if (data.userIdx === undefined) return;
+        const leftUserIdx = data.userIdx;
+        callRoomApi
+          .getCallParticipants(roomId)
+          .then((call) => {
+            const isStillInCall = call.participants.some(
+              (participant) => participant.userIdx === leftUserIdx
+            );
+            if (isStillInCall) return;
+            const matchedPeerIds: string[] = [];
+            peersRef.current.forEach((entry, id) => {
+              if (entry.userIdx === leftUserIdx) matchedPeerIds.push(id);
+            });
+            matchedPeerIds.forEach(closePeer);
+          })
+          .catch(() => {});
+      };
+      socket.on("leave", handleUserLeft);
+      socket.on("user_left", handleUserLeft);
 
-      // 방 삭제 (방장이 방을 삭제했을 때 서버가 방 전체에 브로드캐스트)
+      // 諛???젣 (諛⑹옣??諛⑹쓣 ??젣?덉쓣 ???쒕쾭媛 諛??꾩껜??釉뚮줈?쒖틦?ㅽ듃)
       socket.on("room_deleted", () => {
         onRoomDeletedRef.current?.();
       });
@@ -741,6 +858,7 @@ export function useWebRTC(params: {
       cancelled = true;
       const s = socketRef.current;
       if (s) {
+        s.emit("leave_call", { callRoomIdx: roomIdx });
         s.emit("leave", { callRoomIdx: roomIdx });
         s.disconnect();
         socketRef.current = null;
@@ -757,9 +875,16 @@ export function useWebRTC(params: {
     });
   }, []);
 
+  const sendSpeechCaption = useCallback((text: string) => {
+    const msg = JSON.stringify({ type: "speech_caption", name: nicknameRef.current, text });
+    peersRef.current.forEach((entry) => {
+      if (entry.dc?.readyState === "open") entry.dc.send(msg);
+    });
+  }, []);
+
   const sendFrame = useCallback((frames: number[][]) => {
     socketRef.current?.emit("send_frame", { callRoomIdx: roomIdx, frame: frames });
   }, [roomIdx]);
 
-  return { remoteParticipants, sendCaption, sendFrame };
+  return { remoteParticipants, sendCaption, sendSpeechCaption, sendFrame };
 }

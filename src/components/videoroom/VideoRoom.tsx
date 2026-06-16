@@ -15,7 +15,7 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
   return <audio ref={ref} autoPlay />;
 }
 import { useRouter } from "next/navigation";
-import { Captions, MicOff, Settings } from "lucide-react";
+import { Captions, HelpCircle, MicOff, Settings } from "lucide-react";
 import StreamVideo from "./StreamVideo";
 import { ActivePanel, ChatMessage, Participant } from "./types";
 import { SCREEN_SHARE_PARTICIPANT } from "./mockData";
@@ -26,7 +26,9 @@ import ParticipantsPanel from "./ParticipantsPanel";
 import MeetingNotesPanel from "./MeetingNotesPanel";
 import InviteModal from "./InviteModal";
 import RoomSettingsModal from "./RoomSettingsModal";
+import VideoRoomTutorial from "./VideoRoomTutorial";
 import { useSignLanguage } from "./useSignLanguage";
+import { useSpeechToText } from "./useSpeechToText";
 import { useChatSocket } from "./useChatSocket";
 import { useWebRTC } from "./useWebRTC";
 import { callRoomApi } from "@/api/callRoomApi";
@@ -39,6 +41,11 @@ interface VideoRoomProps {
   isHost?: boolean;
   isPrivate?: boolean;
 }
+
+type TutorialStep = "intro" | "camera" | "captions" | "sign" | "speech";
+type CaptionItem = { id: number; name: string; text: string };
+const VIDEO_ROOM_TUTORIAL_KEY = "gesture_video_room_tutorial_v1";
+const MAX_VISIBLE_CAPTIONS = 3;
 
 export default function VideoRoom({
   roomId,
@@ -54,6 +61,34 @@ export default function VideoRoom({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showMeetingNotice, setShowMeetingNotice] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!localStorage.getItem(VIDEO_ROOM_TUTORIAL_KEY)) {
+        setTutorialStep("intro");
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const finishTutorial = useCallback(() => {
+    localStorage.setItem(VIDEO_ROOM_TUTORIAL_KEY, "completed");
+    setTutorialStep(null);
+  }, []);
+
+  const advanceTutorial = useCallback(() => {
+    setTutorialStep((current) => {
+      if (current === "camera") return "captions";
+      if (current === "captions") return "sign";
+      if (current === "sign") return "speech";
+      if (current === "speech") {
+        localStorage.setItem(VIDEO_ROOM_TUTORIAL_KEY, "completed");
+        return null;
+      }
+      return "camera";
+    });
+  }, []);
 
   // ── 컨트롤 상태 ──────────────────────────────────────────
   const [isMicOn, setIsMicOn] = useState(false);
@@ -148,30 +183,73 @@ export default function VideoRoom({
   }, [isMicOn, cleanupAudio]);
 
   // ── 자막 (닉네임 → 텍스트 맵, 동시에 여러 명 자막 표시) ──────
-  const [captions, setCaptions] = useState<Map<string, string>>(new Map());
-  const captionTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [captions, setCaptions] = useState<CaptionItem[]>([]);
+  const captionTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const [speechCaptions, setSpeechCaptions] = useState<CaptionItem[]>([]);
+  const speechCaptionTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const captionIdRef = useRef(0);
+  const captionQueueRef = useRef<number[]>([]);
+  const speechCaptionQueueRef = useRef<number[]>([]);
 
   const showCaption = useCallback((name: string, text: string) => {
-    setCaptions((prev) => {
-      const next = new Map(prev);
-      next.set(name, text);
-      return next;
-    });
-    const existing = captionTimersRef.current.get(name);
-    if (existing) clearTimeout(existing);
+    const id = ++captionIdRef.current;
+    captionQueueRef.current.push(id);
+    const removedId =
+      captionQueueRef.current.length > MAX_VISIBLE_CAPTIONS
+        ? captionQueueRef.current.shift()
+        : undefined;
+    if (removedId !== undefined) {
+      clearTimeout(captionTimersRef.current.get(removedId));
+      captionTimersRef.current.delete(removedId);
+    }
+    setCaptions((prev) => [
+      ...prev.filter((caption) => caption.id !== removedId),
+      { id, name, text },
+    ]);
     const timer = setTimeout(() => {
-      setCaptions((prev) => {
-        const next = new Map(prev);
-        next.delete(name);
-        return next;
-      });
-      captionTimersRef.current.delete(name);
+      setCaptions((prev) => prev.filter((caption) => caption.id !== id));
+      captionQueueRef.current = captionQueueRef.current.filter(
+        (captionId) => captionId !== id
+      );
+      captionTimersRef.current.delete(id);
     }, 6000);
-    captionTimersRef.current.set(name, timer);
+    captionTimersRef.current.set(id, timer);
+  }, []);
+
+  const showSpeechCaption = useCallback((name: string, text: string) => {
+    const id = ++captionIdRef.current;
+    speechCaptionQueueRef.current.push(id);
+    const removedId =
+      speechCaptionQueueRef.current.length > MAX_VISIBLE_CAPTIONS
+        ? speechCaptionQueueRef.current.shift()
+        : undefined;
+    if (removedId !== undefined) {
+      clearTimeout(speechCaptionTimersRef.current.get(removedId));
+      speechCaptionTimersRef.current.delete(removedId);
+    }
+    setSpeechCaptions((prev) => [
+      ...prev.filter((caption) => caption.id !== removedId),
+      { id, name, text },
+    ]);
+    const timer = setTimeout(() => {
+      setSpeechCaptions((prev) => prev.filter((caption) => caption.id !== id));
+      speechCaptionQueueRef.current = speechCaptionQueueRef.current.filter(
+        (captionId) => captionId !== id
+      );
+      speechCaptionTimersRef.current.delete(id);
+    }, 6000);
+    speechCaptionTimersRef.current.set(id, timer);
   }, []);
 
   useEffect(() => {
-    return () => { captionTimersRef.current.forEach(clearTimeout); };
+    const captionTimers = captionTimersRef.current;
+    const speechCaptionTimers = speechCaptionTimersRef.current;
+    return () => {
+      captionTimers.forEach(clearTimeout);
+      speechCaptionTimers.forEach(clearTimeout);
+      captionQueueRef.current = [];
+      speechCaptionQueueRef.current = [];
+    };
   }, []);
 
   // ── 화면 공유 스트림 ──────────────────────────────────────
@@ -221,7 +299,7 @@ export default function VideoRoom({
   }, [router, cleanupAudio]);
 
   // ── WebRTC ───────────────────────────────────────────────
-  const { remoteParticipants, sendCaption, sendFrame } = useWebRTC({
+  const { remoteParticipants, sendCaption, sendSpeechCaption, sendFrame } = useWebRTC({
     roomId,
     userId: user?.id ?? "",
     nickname: user?.nickname ?? "익명",
@@ -230,6 +308,7 @@ export default function VideoRoom({
     screenStream,
     isSpeaking: isMicOn && myIsSpeaking,
     onCaption: showCaption,
+    onSpeechCaption: showSpeechCaption,
     onTranslation: (text) => {
       // 내가 실제로 손을 감지 중일 때만 내 번역으로 처리
       // → 여러 명이 카메라 켜도 손이 감지된 사람만 자막 claim
@@ -239,6 +318,12 @@ export default function VideoRoom({
       sendCaption(text);
     },
     onRoomDeleted: handleRoomDeleted,
+  });
+
+  useSpeechToText(micStream, (text) => {
+    const myName = user?.nickname ?? "Unknown";
+    showSpeechCaption(myName, text);
+    sendSpeechCaption(text);
   });
 
   // 원격 발화 상태는 DataChannel로 수신된 p.isSpeaking 사용
@@ -542,6 +627,27 @@ export default function VideoRoom({
 
   return (
     <div className="flex flex-col w-screen h-screen bg-black overflow-hidden relative">
+      {tutorialStep && (
+        <VideoRoomTutorial
+          step={tutorialStep}
+          isCameraOn={isCameraOn && !!cameraStream}
+          isMicOn={isMicOn && !!micStream}
+          isSubtitlesOn={isSubtitlesOn}
+          onStart={() => setTutorialStep("camera")}
+          onSkip={finishTutorial}
+          onNext={advanceTutorial}
+          onEnableCamera={() => setIsCameraOn(true)}
+          onEnableSubtitles={() => setIsSubtitlesOn(true)}
+          onPrepareSign={() => {
+            setIsCameraOn(true);
+            setIsSubtitlesOn(true);
+          }}
+          onPrepareSpeech={() => {
+            setIsMicOn(true);
+            setIsSubtitlesOn(true);
+          }}
+        />
+      )}
       {/* 원격 참여자 오디오 — 카메라 상태와 무관하게 항상 재생 */}
       {remoteParticipants.filter((p) => p.stream).map((p) => (
         <RemoteAudio key={p.id} stream={p.stream!} />
@@ -602,13 +708,25 @@ export default function VideoRoom({
                 )}
 
                 {/* 자막 — 메인 비디오 우하단 */}
-                {isSubtitlesOn && captions.size > 0 && (
-                  <div className="absolute bottom-8 right-3 flex flex-col gap-1 items-end pointer-events-none z-20 max-w-[70%]">
-                    {Array.from(captions.entries()).map(([name, text]) => (
-                      <p key={name} className="text-white text-[12px] font-medium bg-black/60 px-3 py-1.5 rounded-[6px] leading-relaxed">
-                        <span className="font-bold text-[#724BFD]">{name}</span>
+                {isSubtitlesOn && captions.length > 0 && (
+                  <div className="absolute bottom-10 right-4 flex flex-col gap-2 items-end pointer-events-none z-20 max-w-[78%]">
+                    {captions.map((caption) => (
+                      <p key={caption.id} className="text-white text-[20px] font-semibold bg-black/90 border border-white/15 px-5 py-3 rounded-[6px] leading-8 shadow-lg">
+                        <span className="font-bold text-[#A992FF]">{caption.name}</span>
                         {" : "}
-                        {text}
+                        {caption.text}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {isSubtitlesOn && speechCaptions.length > 0 && (
+                  <div className="absolute top-12 right-4 flex flex-col gap-2 items-end pointer-events-none z-20 max-w-[78%]">
+                    {speechCaptions.map((caption) => (
+                      <p key={caption.id} className="text-white text-[20px] font-semibold bg-black/90 border border-white/15 px-5 py-3 rounded-[6px] leading-8 shadow-lg">
+                        <span className="font-bold text-[#76E083]">{caption.name}</span>
+                        {" : "}
+                        {caption.text}
                       </p>
                     ))}
                   </div>
@@ -689,6 +807,13 @@ export default function VideoRoom({
           className="absolute bottom-[19px] left-0 ml-[39px] z-50 w-10 h-10 flex items-center justify-center text-white hover:bg-white/10 rounded-[10px] transition-colors"
         >
           <Settings size={22} />
+        </button>
+        <button
+          onClick={() => setTutorialStep("intro")}
+          title="통화방 튜토리얼"
+          className="absolute bottom-[19px] left-[88px] z-50 w-10 h-10 flex items-center justify-center text-white hover:bg-white/10 rounded-[10px] transition-colors"
+        >
+          <HelpCircle size={22} />
         </button>
       </div>
 

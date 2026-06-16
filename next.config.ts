@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
         source: "/api/v1/:path*",
         destination: `${BACKEND_URL}/api/v1/:path*`,
       },
+      {
+        source: "/api/media/:path*",
+        destination: `${BACKEND_URL}/api/media/:path*`,
+      },
       // socket.io 프록시: WebRTC + 채팅 소켓
       {
         source: "/socket.io/:path*",

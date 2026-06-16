@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useAuthStore, User } from "@/store/authStore";
-import { userApi } from "@/api/userApi";
 import { toast } from "react-toastify";
+import { userApi } from "@/api/userApi";
+import { deleteCookie } from "@/lib/cookie";
+import { useAuthStore, User } from "@/store/authStore";
 
 export interface UpdateProfileFields extends Partial<User> {
   profileImageFile?: File;
@@ -21,41 +22,35 @@ export default function useProfile() {
       const updated = await userApi.updateUser({
         nickname: fields.nickname,
         statusMessage: fields.statusMessage,
-        ...(fields.profileImageFile ? { profileImage: fields.profileImageFile } : {}),
+        ...(fields.profileImageFile
+          ? { profileImage: fields.profileImageFile }
+          : {}),
       });
       setUser({
         ...user,
-        nickname: updated.nickname,
-        statusMessage: updated.statusMessage,
-        profileImage: updated.profileUrl ?? updated.profileImage,
+        nickname: updated.nickname ?? fields.nickname ?? user.nickname,
+        statusMessage:
+          updated.statusMessage ?? fields.statusMessage ?? user.statusMessage,
+        profileImage:
+          updated.profileUrl ?? updated.profileImage ?? user.profileImage,
       });
-      toast.success("프로필이 업데이트되었습니다.");
+      toast.success("프로필이 수정되었습니다.");
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "프로필 업데이트에 실패했습니다.";
+          ?.message ?? "프로필 수정에 실패했습니다.";
       toast.error(message);
     }
   };
 
-  // 탈퇴: 1단계 - 비밀번호로 이메일 인증 요청, 2단계 - 이메일 인증 코드로 탈퇴 확인
-  const requestWithdraw = async (password: string) => {
-    await userApi.requestWithdraw(password);
+  const withdraw = async () => {
+    await userApi.withdraw();
+    localStorage.removeItem("accessToken");
+    deleteCookie("refreshToken");
+    clearUser();
+    toast.success("회원탈퇴가 완료되었습니다.");
+    router.replace("/auth/login");
   };
 
-  const confirmWithdraw = async (confirmationCode: string) => {
-    try {
-      await userApi.confirmWithdraw(confirmationCode);
-      clearUser();
-      router.push("/auth/signup");
-      toast.success("회원 탈퇴 되었습니다.");
-    } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "회원 탈퇴에 실패했습니다.";
-      toast.error(message);
-    }
-  };
-
-  return { user, getProfile, updateProfile, requestWithdraw, confirmWithdraw };
+  return { user, getProfile, updateProfile, withdraw };
 }

@@ -1,106 +1,182 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
-import { FriendUser, FriendStatus } from "../types";
-import { ALL_USERS } from "../mockData";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { Search, X } from "lucide-react";
 import { toast } from "react-toastify";
+import { friendApi } from "@/api/friendApi";
+import { userApi, UserProfile } from "@/api/userApi";
+import { DefaultProfile } from "@/assets";
+import { useAuthStore } from "@/store/authStore";
 
 interface Props {
   onClose: () => void;
 }
 
-const STATUS_LABEL: Record<FriendStatus, string> = {
-  friend: "친구",
-  sent: "보냄",
-  none: "추가",
-};
-
-const STATUS_STYLE: Record<FriendStatus, string> = {
-  friend: "bg-[#F0EEFF] text-[#724BFD]",
-  sent: "bg-[#F5F5F5] text-[#AAAAAA]",
-  none: "bg-[#724BFD] text-white hover:bg-[#5f3de0]",
-};
+type SearchUser = UserProfile & { requestSent?: boolean; isFriend?: boolean };
 
 export default function AddFriendModal({ onClose }: Props) {
+  const currentUser = useAuthStore((state) => state.user);
   const [query, setQuery] = useState("");
-  const [users, setUsers] = useState<FriendUser[]>(ALL_USERS);
+  const [users, setUsers] = useState<SearchUser[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const filtered = query
-    ? users.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()))
-    : [];
+  useEffect(() => {
+    const keyword = query.trim();
+    if (!keyword) {
+      setUsers([]);
+      setLoading(false);
+      return;
+    }
 
-  const handleAction = (userId: string, status: FriendStatus) => {
-    if (status === "friend" || status === "sent") return;
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, status: "sent" } : u))
-    );
-    toast.success("친구 요청을 보냈습니다.");
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const [searchedUsers, friends] = await Promise.all([
+          userApi.searchUser(keyword),
+          friendApi.getFriends().catch(() => []),
+        ]);
+        if (cancelled) return;
+        const friendIds = new Set(
+          friends.flatMap((friend) => [friend.id, friend.userId]).filter(Boolean)
+        );
+        setUsers(
+          searchedUsers
+            .filter((user) => user.id !== currentUser?.id)
+            .map((user) => ({
+              ...user,
+              isFriend: friendIds.has(user.id) || friendIds.has(user.userId),
+            }))
+        );
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const statusCode = (err as { response?: { data?: { statusCode?: string } } })
+          ?.response?.data?.statusCode;
+        if (statusCode === "USER_001") {
+          setUsers([]);
+        } else {
+          toast.error("사용자 검색에 실패했습니다.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, currentUser?.id]);
+
+  const sendFriendRequest = async (userId: string) => {
+    setSendingId(userId);
+    try {
+      await friendApi.sendRequest(userId);
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === userId ? { ...user, requestSent: true } : user
+        )
+      );
+      toast.success("친구 요청을 보냈습니다.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "친구 요청에 실패했습니다.";
+      toast.error(message);
+    } finally {
+      setSendingId(null);
+    }
   };
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="w-[420px] h-[480px] bg-white rounded-[16px] shadow-xl overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-6 pt-5 pb-4">
-            <h2 className="text-[18px] font-bold text-[#333333]">친구 추가</h2>
-            <button onClick={onClose} className="text-[#AAAAAA] hover:text-[#333]">
-              <X size={18} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="flex h-[500px] w-full max-w-[440px] flex-col overflow-hidden rounded-[8px] bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-[#EEEEEE] px-6 py-5">
+            <h2 className="text-[19px] font-bold text-[#333333]">친구 추가</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              title="닫기"
+              className="flex h-8 w-8 items-center justify-center text-[#999999] hover:text-[#333333]"
+            >
+              <X size={19} />
             </button>
-          </div>
-
-          <div className="px-6 pb-4">
-            <label className="text-[13px] font-semibold text-[#333333] block mb-2">아이디</label>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="아이디를 입력하세요"
-              className="w-full h-[44px] border border-[#DDDDDD] rounded-[10px] px-4 text-[14px] outline-none focus:border-[#724BFD] transition-colors"
-            />
-          </div>
-
-          <div className="px-4 flex-1 overflow-y-auto">
-            {filtered.length === 0 && query && (
-              <p className="text-center text-[13px] text-[#AAAAAA] py-4">검색 결과가 없습니다.</p>
-            )}
-            {filtered.map((u) => (
-              <div
-                key={u.id}
-                className="flex items-center gap-3 px-2 py-2.5 border-b border-[#F5F5F5] last:border-0"
-              >
-                <div className="w-9 h-9 rounded-full bg-[#CCCCCC] flex items-center justify-center text-white text-[14px] font-bold shrink-0">
-                  {u.nickname[0]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-[#333333]">{u.nickname}</p>
-                  <p className="text-[12px] text-[#AAAAAA]">@{u.username}</p>
-                </div>
-                <button
-                  onClick={() => handleAction(u.id, u.status)}
-                  className={`shrink-0 h-[30px] px-4 rounded-[8px] text-[12px] font-medium transition-colors ${STATUS_STYLE[u.status]}`}
-                >
-                  {STATUS_LABEL[u.status]}
-                </button>
-              </div>
-            ))}
           </div>
 
           <div className="px-6 py-4">
-            <button
-              onClick={onClose}
-              className="w-full h-[44px] bg-[#724BFD] text-white text-[14px] font-semibold rounded-[10px] hover:bg-[#5f3de0] transition-colors"
-            >
-              완료
-            </button>
+            <label htmlFor="friend-search" className="mb-2 block text-[13px] font-semibold text-[#333333]">
+              사용자 아이디
+            </label>
+            <div className="relative">
+              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#AAAAAA]" />
+              <input
+                id="friend-search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="아이디를 입력하세요"
+                autoFocus
+                className="h-11 w-full rounded-[6px] border border-[#DDDDDD] pl-11 pr-4 text-[14px] outline-none focus:border-[#724BFD]"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 pb-4">
+            {loading && (
+              <p className="py-10 text-center text-[14px] text-[#999999]">검색 중...</p>
+            )}
+            {!loading && query.trim() && users.length === 0 && (
+              <p className="py-10 text-center text-[14px] text-[#999999]">검색 결과가 없습니다.</p>
+            )}
+            {!loading && !query.trim() && (
+              <p className="py-10 text-center text-[14px] text-[#999999]">친구로 추가할 사용자의 아이디를 검색하세요.</p>
+            )}
+            {!loading && users.map((user) => {
+              const disabled = user.isFriend || user.requestSent || sendingId === user.id;
+              const label = user.isFriend
+                ? "친구"
+                : user.requestSent
+                  ? "요청됨"
+                  : sendingId === user.id
+                    ? "전송 중"
+                    : "친구 추가";
+              return (
+                <div key={user.idx ?? user.id} className="flex items-center gap-3 border-b border-[#F0F0F0] py-3 last:border-0">
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-[#EEEEEE]">
+                    <Image
+                      src={user.profileUrl || user.profileImage || DefaultProfile}
+                      alt="프로필"
+                      width={44}
+                      height={44}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-[#333333]">{user.nickname}</p>
+                    <p className="truncate text-[12px] text-[#999999]">@{user.id || user.userId}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => sendFriendRequest(user.id || user.userId)}
+                    className="h-9 rounded-[6px] bg-[#724BFD] px-4 text-[13px] font-semibold text-white hover:bg-[#5F3DE0] disabled:bg-[#EEEEEE] disabled:text-[#999999]"
+                  >
+                    {label}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

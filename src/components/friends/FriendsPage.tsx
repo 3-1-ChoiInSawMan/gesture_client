@@ -16,6 +16,9 @@ export default function FriendsPage() {
   const { selectedRoomId } = useChatStore();
   const { user, _hasHydrated } = useAuthStore();
   const router = useRouter();
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [showSendMessage, setShowSendMessage] = useState(false);
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
 
   useEffect(() => {
     if (_hasHydrated && !user) {
@@ -25,9 +28,6 @@ export default function FriendsPage() {
   }, [_hasHydrated, user, router]);
 
   if (!_hasHydrated || !user) return null;
-  const [showAddFriend, setShowAddFriend] = useState(false);
-  const [showSendMessage, setShowSendMessage] = useState(false);
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
 
   return (
     <div className="flex h-[calc(100vh-62px)] overflow-hidden">

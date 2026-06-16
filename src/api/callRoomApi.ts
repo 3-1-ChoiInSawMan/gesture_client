@@ -51,6 +51,21 @@ export interface RoomsPage {
   pageNumber: number;
 }
 
+export interface CallParticipant {
+  userIdx: number;
+  nickname: string;
+  joinedAt?: string;
+  isHost?: boolean;
+  host?: boolean;
+}
+
+export interface CallParticipantsResponse {
+  callIdx: number;
+  roomIdx: number;
+  participants: CallParticipant[];
+  currentParticipant: number;
+}
+
 function parseRoomsPage(data: unknown): RoomsPage {
   const body = (data as Record<string, unknown>)?.data ?? data;
   const nested = body as Record<string, unknown>;
@@ -71,6 +86,30 @@ function parseRoomsPage(data: unknown): RoomsPage {
 }
 
 export const callRoomApi = {
+  getCallParticipants: async (
+    roomId: string | number
+  ): Promise<CallParticipantsResponse> => {
+    const { data, status } = await api.get(`/calls/${roomId}/participants`, {
+      validateStatus: (responseStatus) =>
+        (responseStatus >= 200 && responseStatus < 300) || responseStatus === 404,
+    });
+    if (status === 404) {
+      return {
+        callIdx: 0,
+        roomIdx: Number(roomId),
+        participants: [],
+        currentParticipant: 0,
+      };
+    }
+    const body = data?.data?.call ?? data?.data ?? data;
+    return {
+      callIdx: body?.callIdx ?? 0,
+      roomIdx: body?.roomIdx ?? Number(roomId),
+      participants: Array.isArray(body?.participants) ? body.participants : [],
+      currentParticipant: body?.currentParticipant ?? 0,
+    };
+  },
+
   getRooms: async (params?: {
     page?: number;
     size?: number;

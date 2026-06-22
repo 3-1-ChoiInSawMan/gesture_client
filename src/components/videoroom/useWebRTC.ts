@@ -651,6 +651,13 @@ export function useWebRTC(params: {
           entry.pc.iceConnectionState === "connected" ||
           entry.pc.iceConnectionState === "completed");
 
+      const isPeerTerminal = (entry?: PeerEntry) =>
+        !!entry &&
+        (entry.pc.connectionState === "failed" ||
+          entry.pc.connectionState === "closed" ||
+          entry.pc.iceConnectionState === "failed" ||
+          entry.pc.iceConnectionState === "closed");
+
       const isSignalForMe = (data: { targetSocketId?: string }) =>
         !data.targetSocketId || data.targetSocketId === socket.id;
 
@@ -660,7 +667,7 @@ export function useWebRTC(params: {
 
         const existingEntry = peersRef.current.get(peerId);
         if (isPeerConnected(existingEntry)) return;
-        if (existingEntry && existingEntry.pc.signalingState !== "stable") return;
+        if (existingEntry && !isPeerTerminal(existingEntry)) return;
         if (existingEntry) detachPeerConnection(peerId);
 
         const pc = createPeer(peerId);
@@ -777,7 +784,7 @@ export function useWebRTC(params: {
         "user_joined",
         async (data: CallPeerInfo) => {
           const peerId = data.socketId;
-          if (!peerId) return;
+          if (!peerId || peerId === socket.id) return;
 
           if (data.userIdx !== undefined) {
             closeStalePeersForUser(data.userIdx, peerId);

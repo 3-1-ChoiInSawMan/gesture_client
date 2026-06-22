@@ -628,6 +628,63 @@ export function useWebRTC(params: {
         };
       };
 
+      const isPeerConnected = (entry?: PeerEntry) =>
+        !!entry &&
+        (entry.pc.connectionState === "connected" ||
+          entry.pc.iceConnectionState === "connected" ||
+          entry.pc.iceConnectionState === "completed");
+
+      const createOfferForParticipant = async (participant: CallPeerInfo) => {
+        const peerId = participant.socketId ?? participant.fromSocketId;
+        if (!peerId || peerId === socket.id) return;
+
+        const existingEntry = peersRef.current.get(peerId);
+        if (isPeerConnected(existingEntry)) return;
+        if (existingEntry && existingEntry.pc.signalingState !== "stable") return;
+        if (existingEntry) detachPeerConnection(peerId);
+
+        const pc = createPeer(peerId);
+        const entry = peersRef.current.get(peerId)!;
+        if (participant.userIdx !== undefined) entry.userIdx = participant.userIdx;
+        upsertSocketParticipant(participant);
+
+        const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
+        const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
+        const screenTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
+        entry.videoSender = videoTransceiver.sender;
+        entry.audioSender = audioTransceiver.sender;
+        entry.screenSender = screenTransceiver.sender;
+
+        setupDC(pc.createDataChannel("state"), peerId);
+
+        const videoTrack = videoStreamRef.current?.getVideoTracks()[0];
+        const audioTrack = audioStreamRef.current?.getAudioTracks()[0];
+        const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
+        if (videoTrack) videoTransceiver.sender.replaceTrack(videoTrack).catch(() => {});
+        if (audioTrack) audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
+        if (screenTrack) screenTransceiver.sender.replaceTrack(screenTrack).catch(() => {});
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitForIceGathering(pc);
+        socket.emit("offer", {
+          callRoomIdx: roomIdx,
+          sdp: pc.localDescription!.sdp,
+          targetSocketId: peerId,
+          userId: myId,
+        });
+
+        if (screenStreamRef.current) {
+          socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
+        }
+        if (videoStreamRef.current) {
+          socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+        }
+        if (audioStreamRef.current) {
+          socket.emit("mic_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+        }
+      };
+
       const handleExistingParticipants = (payload?: {
         participants?: CallPeerInfo[];
         users?: CallPeerInfo[];
@@ -637,6 +694,15 @@ export function useWebRTC(params: {
           : payload?.participants ?? payload?.users ?? [];
         participants.forEach((participant) => {
           upsertSocketParticipant(participant);
+          window.setTimeout(() => {
+            const peerId = participant.socketId ?? participant.fromSocketId;
+            const entry = peerId ? peersRef.current.get(peerId) : undefined;
+            if (peerId && !isPeerConnected(entry)) {
+              createOfferForParticipant(participant).catch((error) => {
+                if (shouldLogSocket) console.warn("[WebRTC] recovery offer failed:", peerId, error);
+              });
+            }
+          }, 5000);
         });
       };
 

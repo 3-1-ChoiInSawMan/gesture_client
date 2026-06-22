@@ -107,11 +107,13 @@ interface PeerEntry {
 interface CallPeerInfo {
   socketId?: string;
   fromSocketId?: string;
+  targetSocketId?: string;
   userIdx?: number;
   nickname?: string;
 }
 
 type AnswerPayload = {
+  targetSocketId?: string;
   fromSocketId?: string;
   fromUserIdx?: number;
   fromNickname?: string;
@@ -385,7 +387,8 @@ export function useWebRTC(params: {
       pc.ontrack = (e) => {
         if (e.track.kind === "video") {
           // 泥?踰덉㎏ video track = 移대찓?? ??踰덉㎏ = ?붾㈃ 怨듭쑀
-          const isScreenTrack = remoteStream.getVideoTracks().length > 0;
+          const isScreenTrack =
+            e.transceiver?.mid === "2" || remoteStream.getVideoTracks().length > 0;
 
           if (!isScreenTrack) {
             // ?? 移대찓???몃옓 ??
@@ -648,6 +651,9 @@ export function useWebRTC(params: {
           entry.pc.iceConnectionState === "connected" ||
           entry.pc.iceConnectionState === "completed");
 
+      const isSignalForMe = (data: { targetSocketId?: string }) =>
+        !data.targetSocketId || data.targetSocketId === socket.id;
+
       const createOfferForParticipant = async (participant: CallPeerInfo) => {
         const peerId = participant.socketId ?? participant.fromSocketId;
         if (!peerId || peerId === socket.id) return;
@@ -837,12 +843,14 @@ export function useWebRTC(params: {
       socket.on(
         "offer",
         async (data: {
+          targetSocketId?: string;
           fromSocketId?: string;
           fromUserIdx?: number;
           fromNickname?: string;
           nickname?: string;
           sdp?: string;
         }) => {
+          if (!isSignalForMe(data)) return;
           const peerId = data.fromSocketId;
           if (!peerId || !data.sdp) return;
           const userIdx = data.fromUserIdx;
@@ -934,6 +942,7 @@ export function useWebRTC(params: {
       socket.on(
         "answer",
         async (data: AnswerPayload) => {
+          if (!isSignalForMe(data)) return;
           const peerId = resolveAnswerPeerId(data);
           console.log("[WebRTC] answer event ??fromSocketId:", peerId, "| peer exists:", !!peersRef.current.get(peerId!));
           if (!peerId || !data.sdp) return;
@@ -986,11 +995,13 @@ export function useWebRTC(params: {
 
       // ICE candidate ?섏떊 (?쒕쾭媛 trickle ICE瑜?吏?먰븷 寃쎌슦 ?ъ슜)
       const handleIceCandidate = async (data: {
+          targetSocketId?: string;
           fromSocketId?: string;
           candidate?: string;
           sdpMid?: string | null;
           sdpMLineIndex?: number | null;
         }) => {
+          if (!isSignalForMe(data)) return;
           const peerId = data.fromSocketId;
           if (!peerId || !data.candidate) return;
           const peer = peersRef.current.get(peerId);
@@ -1008,7 +1019,8 @@ export function useWebRTC(params: {
       socket.on("ice_candidate", handleIceCandidate);
 
       // ?붾㈃ 怨듭쑀 ?쒖옉/醫낅즺 ?섏떊
-      socket.on("screen_share_start", (data: { fromSocketId?: string }) => {
+      socket.on("screen_share_start", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1016,7 +1028,8 @@ export function useWebRTC(params: {
         );
       });
 
-      socket.on("screen_share_stop", (data: { fromSocketId?: string }) => {
+      socket.on("screen_share_stop", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1025,7 +1038,8 @@ export function useWebRTC(params: {
       });
 
       // 移대찓??on/off ?섏떊
-      socket.on("camera_on", (data: { fromSocketId?: string }) => {
+      socket.on("camera_on", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1033,7 +1047,8 @@ export function useWebRTC(params: {
         );
       });
 
-      socket.on("camera_off", (data: { fromSocketId?: string }) => {
+      socket.on("camera_off", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1043,7 +1058,8 @@ export function useWebRTC(params: {
 
       // ?섏뼱 ?먮쭑 踰덉뿭 寃곌낵
       // ??寃껋씤吏 ?먮떒? VideoRoom??onTranslation 肄쒕갚?먯꽌 isDetecting 湲곕컲?쇰줈 泥섎━
-      socket.on("mic_on", (data: { fromSocketId?: string }) => {
+      socket.on("mic_on", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1051,7 +1067,8 @@ export function useWebRTC(params: {
         );
       });
 
-      socket.on("mic_off", (data: { fromSocketId?: string }) => {
+      socket.on("mic_off", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1061,7 +1078,8 @@ export function useWebRTC(params: {
         );
       });
 
-      socket.on("speaking_on", (data: { fromSocketId?: string }) => {
+      socket.on("speaking_on", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>
@@ -1069,7 +1087,8 @@ export function useWebRTC(params: {
         );
       });
 
-      socket.on("speaking_off", (data: { fromSocketId?: string }) => {
+      socket.on("speaking_off", (data: { targetSocketId?: string; fromSocketId?: string }) => {
+        if (!isSignalForMe(data)) return;
         const peerId = data.fromSocketId;
         if (!peerId) return;
         setRemoteParticipants((prev) =>

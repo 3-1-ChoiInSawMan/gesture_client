@@ -447,6 +447,7 @@ export function useWebRTC(params: {
             callRoomIdx: roomIdx,
             sdp: pc.localDescription!.sdp,
             targetSocketId: peerId,
+            fromSocketId: socketRef.current.id,
             userId: myIdRef.current,
           });
         } catch {
@@ -506,7 +507,7 @@ export function useWebRTC(params: {
     if (!s?.connected) return;
     const event = screenStream ? "screen_share_start" : "screen_share_stop";
     peersRef.current.forEach((_, peerId) => {
-      s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+      s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: s.id });
     });
   }, [screenStream, roomIdx]);
 
@@ -516,7 +517,7 @@ export function useWebRTC(params: {
     const event = localVideoStream ? "camera_on" : "camera_off";
     if (s?.connected) {
       peersRef.current.forEach((_, peerId) => {
-        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: s.id });
       });
     }
     const msg = JSON.stringify({ type: localVideoStream ? "camera_on" : "camera_off" });
@@ -530,7 +531,7 @@ export function useWebRTC(params: {
     const event = localAudioStream ? "mic_on" : "mic_off";
     if (s?.connected) {
       peersRef.current.forEach((_, peerId) => {
-        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: s.id });
       });
     }
     const msg = JSON.stringify({ type: localAudioStream ? "mic_on" : "mic_off" });
@@ -553,7 +554,7 @@ export function useWebRTC(params: {
     const event = isSpeaking ? "speaking_on" : "speaking_off";
     if (s?.connected) {
       peersRef.current.forEach((_, peerId) => {
-        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: s.id });
       });
     }
     const msg = JSON.stringify({ type: isSpeaking ? "speaking_on" : "speaking_off" });
@@ -698,17 +699,18 @@ export function useWebRTC(params: {
           callRoomIdx: roomIdx,
           sdp: pc.localDescription!.sdp,
           targetSocketId: peerId,
+          fromSocketId: socket.id,
           userId: myId,
         });
 
         if (screenStreamRef.current) {
-          socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
+          socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
         }
         if (videoStreamRef.current) {
-          socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+          socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
         }
         if (audioStreamRef.current) {
-          socket.emit("mic_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+          socket.emit("mic_on", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
         }
       };
 
@@ -834,15 +836,16 @@ export function useWebRTC(params: {
             callRoomIdx: roomIdx,
             sdp: pc.localDescription!.sdp,
             targetSocketId: peerId,
+            fromSocketId: socket.id,
             userId: myId,
           });
 
           // ?꾩옱 ?붾㈃ 怨듭쑀 以묒씠硫????쇱뼱?먭쾶???뚮┝
           if (screenStreamRef.current) {
-            socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
+            socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
           }
           if (videoStreamRef.current) {
-            socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+            socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
           }
         }
       );
@@ -922,16 +925,17 @@ export function useWebRTC(params: {
             callRoomIdx: roomIdx,
             sdp: pc.localDescription!.sdp,
             targetSocketId: peerId,
+            fromSocketId: socket.id,
             userId: myId,
           });
           entry.readyForRenegotiation = true;
 
           // ?꾩옱 ?붾㈃ 怨듭쑀/移대찓???곹깭瑜??ㅽ띁?ъ뿉寃뚮룄 ?뚮┝
           if (screenStreamRef.current) {
-            socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId });
+            socket.emit("screen_share_start", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
           }
           if (videoStreamRef.current) {
-            socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId });
+            socket.emit("camera_on", { callRoomIdx: roomIdx, targetSocketId: peerId, fromSocketId: socket.id });
           }
 
           // ?꾨줈???됰꽕???꾩씠??? WebRTC ?묒긽 ?꾨즺 ??fetch

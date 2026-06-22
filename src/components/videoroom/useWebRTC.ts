@@ -111,6 +111,17 @@ interface CallPeerInfo {
   nickname?: string;
 }
 
+const isFallbackProfile = (
+  profile: { name: string; username: string },
+  peerId: string,
+  userIdx?: number
+) =>
+  profile.name === peerId ||
+  profile.name === "Unknown" ||
+  profile.name === `User ${userIdx}` ||
+  profile.username === peerId ||
+  profile.username === "unknown";
+
 export function useWebRTC(params: {
   roomId: string;
   userId: string;
@@ -186,12 +197,17 @@ export function useWebRTC(params: {
   }, []);
 
   const closeStalePeersForUser = useCallback((userIdx: number, keepPeerId: string) => {
+    const stalePeerIds: string[] = [];
     peersRef.current.forEach((entry, oldId) => {
       if (entry.userIdx === userIdx && oldId !== keepPeerId) {
         entry.pc.close();
         peersRef.current.delete(oldId);
+        stalePeerIds.push(oldId);
       }
     });
+    if (stalePeerIds.length > 0) {
+      setRemoteParticipants((prev) => prev.filter((p) => !stalePeerIds.includes(p.id)));
+    }
   }, []);
 
   const upsertRemoteParticipant = useCallback((
@@ -201,6 +217,20 @@ export function useWebRTC(params: {
     patch: Partial<Participant> = {}
   ) => {
     setRemoteParticipants((prev) => {
+      const previousById = prev.find((p) => p.id === peerId);
+      const previousByUser =
+        userIdx !== undefined ? prev.find((p) => p.userIdx === userIdx) : undefined;
+      const previousProfile = previousById ?? previousByUser;
+      const keepPreviousProfile =
+        previousProfile &&
+        !isFallbackProfile(previousProfile, previousProfile.id, previousProfile.userIdx) &&
+        isFallbackProfile(profile, peerId, userIdx);
+      const displayProfile = keepPreviousProfile
+        ? {
+            name: previousProfile.name,
+            username: previousProfile.username,
+          }
+        : profile;
       const withoutStale =
         userIdx !== undefined
           ? prev.filter((p) => p.userIdx !== userIdx || p.id === peerId)
@@ -212,8 +242,8 @@ export function useWebRTC(params: {
             ? {
                 ...p,
                 ...patch,
-                name: profile.name,
-                username: profile.username,
+                name: displayProfile.name,
+                username: displayProfile.username,
                 userIdx: userIdx ?? p.userIdx,
               }
             : p
@@ -223,8 +253,8 @@ export function useWebRTC(params: {
         ...withoutStale,
         {
           id: peerId,
-          name: profile.name,
-          username: profile.username,
+          name: displayProfile.name,
+          username: displayProfile.username,
           userIdx,
           isCameraOff: true,
           isMuted: true,

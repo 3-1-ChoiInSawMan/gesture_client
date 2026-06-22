@@ -42,6 +42,8 @@ export default function CallRoom({ room, onClick }: Props) {
           src={MockRoom}
           alt="통화방 썸네일"
           fill
+          sizes="(max-width: 768px) 100vw, 33vw"
+          loading="eager"
           className="object-cover rounded-t-[15px]"
         />
       </div>
@@ -56,6 +58,7 @@ export default function CallRoom({ room, onClick }: Props) {
                   src={room.profileImage}
                   alt={room.username}
                   fill
+                  sizes="24px"
                   className="object-cover"
                   unoptimized
                 />

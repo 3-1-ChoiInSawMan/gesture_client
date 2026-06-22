@@ -70,6 +70,7 @@ export function useSpeechToText(
 
   useEffect(() => {
     if (!stream) return;
+    let disposed = false;
 
     const socket = new WebSocket(getSttUrl());
     socket.binaryType = "arraybuffer";
@@ -90,6 +91,10 @@ export function useSpeechToText(
       socket.send(resampleToPcm16(samples, audioContext.sampleRate));
     };
 
+    socket.onopen = () => {
+      if (disposed) socket.close();
+    };
+
     socket.onmessage = async (event) => {
       const raw =
         event.data instanceof Blob
@@ -102,15 +107,14 @@ export function useSpeechToText(
     };
 
     return () => {
+      disposed = true;
       processor.onaudioprocess = null;
+      socket.onmessage = null;
       source.disconnect();
       processor.disconnect();
       silentGain.disconnect();
       audioContext.close().catch(() => {});
-      if (
-        socket.readyState === WebSocket.OPEN ||
-        socket.readyState === WebSocket.CONNECTING
-      ) {
+      if (socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
     };

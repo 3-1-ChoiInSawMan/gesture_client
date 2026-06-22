@@ -23,10 +23,14 @@ export function useChatSocket(
 ) {
   const socketRef = useRef<Socket | null>(null);
   const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
 
   useEffect(() => {
     if (!roomId) return;
+    let disposed = false;
 
     const token =
       typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
@@ -47,6 +51,10 @@ export function useChatSocket(
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      if (disposed) {
+        socket.disconnect();
+        return;
+      }
       socket.emit("join_room", { call_room_id: roomId });
     });
 
@@ -72,10 +80,13 @@ export function useChatSocket(
     });
 
     return () => {
+      disposed = true;
       if (socket.connected) {
         socket.emit("leave_room", { call_room_id: roomId });
+        socket.disconnect();
+      } else {
+        socket.once("connect", () => socket.disconnect());
       }
-      socket.disconnect();
       socketRef.current = null;
     };
   }, [roomId]);

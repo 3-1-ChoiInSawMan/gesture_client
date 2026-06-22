@@ -123,7 +123,6 @@ export default function VideoRoom({
       })
       .catch(() => { if (!cancelled) setIsCameraOn(false); });
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraOn]);
 
   useEffect(() => {
@@ -358,9 +357,15 @@ export default function VideoRoom({
 
   const [mainParticipantId, setMainParticipantId] = useState("me");
   const mainParticipantIdRef = useRef("me");
-  mainParticipantIdRef.current = mainParticipantId;
   const remoteParticipantsRef = useRef<Participant[]>([]);
-  remoteParticipantsRef.current = remoteParticipants;
+
+  useEffect(() => {
+    mainParticipantIdRef.current = mainParticipantId;
+  }, [mainParticipantId]);
+
+  useEffect(() => {
+    remoteParticipantsRef.current = remoteParticipants;
+  }, [remoteParticipants]);
 
   // ── 원격 참여자 화면 공유 시작/종료 → 메인뷰 자동 전환 ──────
   const prevScreenSharingPeerRef = useRef<string | null>(null);
@@ -402,6 +407,12 @@ export default function VideoRoom({
   }, [remoteParticipants]);
 
   const mainParticipant = allParticipants.find((p) => p.id === mainParticipantId);
+
+  useEffect(() => {
+    if (mainParticipantId === "screen-share" && isScreenSharing) return;
+    if (allParticipants.some((p) => p.id === mainParticipantId)) return;
+    setMainParticipantId(remoteParticipants[0]?.id ?? "me");
+  }, [allParticipants, isScreenSharing, mainParticipantId, remoteParticipants]);
 
   // ── 스트립 참여자 목록 ─────────────────────────────────────
   // 화면 공유가 메인에 있을 때: 모든 카메라를 스트립에 표시
@@ -563,7 +574,9 @@ export default function VideoRoom({
     sendFrame
   );
   // onTranslation 콜백에서 손 감지 여부 참조용 (렌더마다 최신값 유지)
-  isDetectingRef.current = isDetecting;
+  useEffect(() => {
+    isDetectingRef.current = isDetecting;
+  }, [isDetecting]);
 
   const isMainSpeaking =
     mainParticipantId === "me"

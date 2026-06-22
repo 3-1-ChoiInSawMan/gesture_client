@@ -111,6 +111,15 @@ interface CallPeerInfo {
   nickname?: string;
 }
 
+type AnswerPayload = {
+  fromSocketId?: string;
+  fromUserIdx?: number;
+  fromNickname?: string;
+  nickname?: string;
+  userId?: string;
+  sdp?: string;
+};
+
 const isFallbackProfile = (
   profile: { name: string; username: string },
   peerId: string,
@@ -323,6 +332,23 @@ export function useWebRTC(params: {
     if (!peer.nickname) refreshPeerProfile(peerId, peer.userIdx);
   }, [getSocketProfile, refreshPeerProfile, upsertRemoteParticipant]);
 
+  const resolveAnswerPeerId = useCallback((data: AnswerPayload) => {
+    if (data.fromSocketId) return data.fromSocketId;
+    if (data.fromUserIdx !== undefined) {
+      for (const [peerId, entry] of peersRef.current) {
+        if (entry.userIdx === data.fromUserIdx) return peerId;
+      }
+    }
+
+    const pendingPeers = Array.from(peersRef.current.entries()).filter(
+      ([, entry]) =>
+        entry.pc.signalingState === "have-local-offer" &&
+        !entry.applyingRemoteAnswer &&
+        entry.lastRemoteAnswerSdp !== data.sdp
+    );
+    return pendingPeers.length === 1 ? pendingPeers[0][0] : undefined;
+  }, []);
+
   /**
    * RTCPeerConnection ?앹꽦 諛??대깽???몃뱾?щ쭔 ?ㅼ젙.
    * ?몃옖?쒕쾭/?몃옓 異붽????몄텧遺(offerer/answerer)?먯꽌 ?대떦.
@@ -399,9 +425,10 @@ export function useWebRTC(params: {
           const offer = await pc.createOffer();
           if (pc.signalingState !== "stable") return;
           await pc.setLocalDescription(offer);
+          await waitForIceGathering(pc);
           socketRef.current?.emit("offer", {
             callRoomIdx: roomIdx,
-            sdp: offer.sdp,
+            sdp: pc.localDescription!.sdp,
             targetSocketId: peerId,
             userId: myIdRef.current,
           });
@@ -468,18 +495,32 @@ export function useWebRTC(params: {
 
   // 移대찓??on/off ??DataChannel(P2P)濡??곹깭 ?꾩넚 ???쒕쾭 ?ъ썙??遺덊븘??
   useEffect(() => {
+    const s = socketRef.current;
+    const event = localVideoStream ? "camera_on" : "camera_off";
+    if (s?.connected) {
+      peersRef.current.forEach((_, peerId) => {
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+      });
+    }
     const msg = JSON.stringify({ type: localVideoStream ? "camera_on" : "camera_off" });
     peersRef.current.forEach((entry) => {
       if (entry.dc?.readyState === "open") entry.dc.send(msg);
     });
-  }, [localVideoStream]);
+  }, [localVideoStream, roomIdx]);
 
   useEffect(() => {
+    const s = socketRef.current;
+    const event = localAudioStream ? "mic_on" : "mic_off";
+    if (s?.connected) {
+      peersRef.current.forEach((_, peerId) => {
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+      });
+    }
     const msg = JSON.stringify({ type: localAudioStream ? "mic_on" : "mic_off" });
     peersRef.current.forEach((entry) => {
       if (entry.dc?.readyState === "open") entry.dc.send(msg);
     });
-  }, [localAudioStream]);
+  }, [localAudioStream, roomIdx]);
 
   // ?붾㈃ 怨듭쑀 ?쒖옉/醫낅즺 ??DataChannel(P2P)濡??곹깭 ?꾩넚
   useEffect(() => {
@@ -491,11 +532,18 @@ export function useWebRTC(params: {
 
   // 諛쒗솕 ?곹깭 蹂寃???DataChannel(P2P)濡??꾩넚
   useEffect(() => {
+    const s = socketRef.current;
+    const event = isSpeaking ? "speaking_on" : "speaking_off";
+    if (s?.connected) {
+      peersRef.current.forEach((_, peerId) => {
+        s.emit(event, { callRoomIdx: roomIdx, targetSocketId: peerId });
+      });
+    }
     const msg = JSON.stringify({ type: isSpeaking ? "speaking_on" : "speaking_off" });
     peersRef.current.forEach((entry) => {
       if (entry.dc?.readyState === "open") entry.dc.send(msg);
     });
-  }, [isSpeaking]);
+  }, [isSpeaking, roomIdx]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
@@ -805,14 +853,8 @@ export function useWebRTC(params: {
       // answer ?섏떊 ??珥덇린 ?묒긽 ?꾨즺
       socket.on(
         "answer",
-        async (data: {
-          fromSocketId?: string;
-          fromUserIdx?: number;
-          fromNickname?: string;
-          nickname?: string;
-          sdp?: string;
-        }) => {
-          const peerId = data.fromSocketId;
+        async (data: AnswerPayload) => {
+          const peerId = resolveAnswerPeerId(data);
           console.log("[WebRTC] answer event ??fromSocketId:", peerId, "| peer exists:", !!peersRef.current.get(peerId!));
           if (!peerId || !data.sdp) return;
           const peer = peersRef.current.get(peerId);
@@ -906,6 +948,40 @@ export function useWebRTC(params: {
 
       // ?섏뼱 ?먮쭑 踰덉뿭 寃곌낵
       // ??寃껋씤吏 ?먮떒? VideoRoom??onTranslation 肄쒕갚?먯꽌 isDetecting 湲곕컲?쇰줈 泥섎━
+      socket.on("mic_on", (data: { fromSocketId?: string }) => {
+        const peerId = data.fromSocketId;
+        if (!peerId) return;
+        setRemoteParticipants((prev) =>
+          prev.map((p) => (p.id === peerId ? { ...p, isMuted: false } : p))
+        );
+      });
+
+      socket.on("mic_off", (data: { fromSocketId?: string }) => {
+        const peerId = data.fromSocketId;
+        if (!peerId) return;
+        setRemoteParticipants((prev) =>
+          prev.map((p) =>
+            p.id === peerId ? { ...p, isMuted: true, isSpeaking: false } : p
+          )
+        );
+      });
+
+      socket.on("speaking_on", (data: { fromSocketId?: string }) => {
+        const peerId = data.fromSocketId;
+        if (!peerId) return;
+        setRemoteParticipants((prev) =>
+          prev.map((p) => (p.id === peerId ? { ...p, isSpeaking: true } : p))
+        );
+      });
+
+      socket.on("speaking_off", (data: { fromSocketId?: string }) => {
+        const peerId = data.fromSocketId;
+        if (!peerId) return;
+        setRemoteParticipants((prev) =>
+          prev.map((p) => (p.id === peerId ? { ...p, isSpeaking: false } : p))
+        );
+      });
+
       const handleTranslation = (data: { text?: string }) => {
         if (data.text) {
           onTranslationRef.current?.(data.text);

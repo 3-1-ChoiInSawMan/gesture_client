@@ -120,6 +120,13 @@ type AnswerPayload = {
   sdp?: string;
 };
 
+const getMLineSignature = (sdp?: string) =>
+  (sdp ?? "")
+    .split("\r\n")
+    .filter((line) => line.startsWith("m="))
+    .map((line) => line.split(" ")[0])
+    .join("|");
+
 const isFallbackProfile = (
   profile: { name: string; username: string },
   peerId: string,
@@ -336,7 +343,14 @@ export function useWebRTC(params: {
     if (data.fromSocketId) return data.fromSocketId;
     if (data.fromUserIdx !== undefined) {
       for (const [peerId, entry] of peersRef.current) {
-        if (entry.userIdx === data.fromUserIdx) return peerId;
+        if (
+          entry.userIdx === data.fromUserIdx &&
+          entry.pc.signalingState === "have-local-offer" &&
+          !entry.applyingRemoteAnswer &&
+          entry.lastRemoteAnswerSdp !== data.sdp
+        ) {
+          return peerId;
+        }
       }
     }
 
@@ -935,6 +949,21 @@ export function useWebRTC(params: {
             }
             peer.applyingRemoteAnswer = true;
             try {
+              const localOfferSignature = getMLineSignature(peer.pc.localDescription?.sdp);
+              const remoteAnswerSignature = getMLineSignature(data.sdp);
+              if (
+                localOfferSignature &&
+                remoteAnswerSignature &&
+                localOfferSignature !== remoteAnswerSignature
+              ) {
+                console.warn("[WebRTC] answer ignored: m-line order mismatch", {
+                  peerId,
+                  localOfferSignature,
+                  remoteAnswerSignature,
+                });
+                peer.lastRemoteAnswerSdp = data.sdp;
+                return;
+              }
               await peer.pc.setRemoteDescription({ type: "answer", sdp: data.sdp });
               peer.lastRemoteAnswerSdp = data.sdp;
               console.log("[WebRTC] setRemoteDescription(answer) OK ??signalingState:", peer.pc.signalingState, "iceState:", peer.pc.iceConnectionState);

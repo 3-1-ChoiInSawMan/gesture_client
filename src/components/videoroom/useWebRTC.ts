@@ -191,23 +191,46 @@ export function useWebRTC(params: {
     setRemoteParticipants((prev) => prev.filter((p) => p.id !== peerId));
   }, []);
 
+  const detachPeerConnection = useCallback((peerId: string) => {
+    const entry = peersRef.current.get(peerId);
+    if (entry) {
+      entry.pc.close();
+      peersRef.current.delete(peerId);
+    }
+    setRemoteParticipants((prev) =>
+      prev.map((p) =>
+        p.id === peerId
+          ? {
+              ...p,
+              stream: undefined,
+              screenStream: undefined,
+              isCameraOff: true,
+              isMuted: true,
+              isSpeaking: false,
+              isScreenSharing: false,
+            }
+          : p
+      )
+    );
+  }, []);
+
   const closeAllPeers = useCallback(() => {
     peersRef.current.forEach(({ pc }) => pc.close());
     peersRef.current.clear();
   }, []);
 
   const closeStalePeersForUser = useCallback((userIdx: number, keepPeerId: string) => {
-    const stalePeerIds: string[] = [];
     peersRef.current.forEach((entry, oldId) => {
-      if (entry.userIdx === userIdx && oldId !== keepPeerId) {
+      const isTerminal =
+        entry.pc.connectionState === "failed" ||
+        entry.pc.connectionState === "closed" ||
+        entry.pc.iceConnectionState === "failed" ||
+        entry.pc.iceConnectionState === "closed";
+      if (entry.userIdx === userIdx && oldId !== keepPeerId && isTerminal) {
         entry.pc.close();
         peersRef.current.delete(oldId);
-        stalePeerIds.push(oldId);
       }
     });
-    if (stalePeerIds.length > 0) {
-      setRemoteParticipants((prev) => prev.filter((p) => !stalePeerIds.includes(p.id)));
-    }
   }, []);
 
   const upsertRemoteParticipant = useCallback((
@@ -231,10 +254,7 @@ export function useWebRTC(params: {
             username: previousProfile.username,
           }
         : profile;
-      const withoutStale =
-        userIdx !== undefined
-          ? prev.filter((p) => p.userIdx !== userIdx || p.id === peerId)
-          : prev;
+      const withoutStale = prev;
       const existing = withoutStale.find((p) => p.id === peerId);
       if (existing) {
         return withoutStale.map((p) =>
@@ -410,13 +430,13 @@ export function useWebRTC(params: {
         console.log("[WebRTC] connection", peerId, pc.connectionState);
         // "disconnected"???쇱떆???곹깭 ???쒓굅?섎㈃ 蹂듦뎄 遺덇??ν빐吏誘濡?"failed"留?泥섎━
         if (pc.connectionState === "failed") {
-          closePeer(peerId);
+          detachPeerConnection(peerId);
         }
       };
 
       return pc;
     },
-    [closePeer, roomIdx]
+    [detachPeerConnection, roomIdx]
   );
 
   // 移대찓??留덉씠???붾㈃怨듭쑀 on/off ??媛?sender??replaceTrack (?ы삊??遺덊븘??
@@ -905,13 +925,6 @@ export function useWebRTC(params: {
           closePeer(peerId);
           return;
         }
-        if (data.userIdx === undefined) return;
-        const leftUserIdx = data.userIdx;
-        const matchedPeerIds: string[] = [];
-        peersRef.current.forEach((entry, id) => {
-          if (entry.userIdx === leftUserIdx) matchedPeerIds.push(id);
-        });
-        matchedPeerIds.forEach(closePeer);
       };
       socket.on("leave", handleUserLeft);
       socket.on("user_left", handleUserLeft);

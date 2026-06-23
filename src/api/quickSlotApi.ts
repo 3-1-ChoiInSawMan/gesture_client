@@ -14,6 +14,17 @@ type QuickSlotValue = QuickSlot | null;
 type QuickSlotMap = Record<string, QuickSlotValue>;
 
 const SLOT_COUNT = 5;
+const LOCAL_MY_SLOTS_KEY = "quick-slots:me";
+const LOCAL_ACTIONS_KEY = "quick-slots:actions";
+const ENABLE_API = process.env.NEXT_PUBLIC_ENABLE_QUICK_SLOT_API === "true";
+
+const DEFAULT_ACTIONS: QuickAction[] = [
+  { name: "안녕하세요", mediaUrl: "" },
+  { name: "감사합니다", mediaUrl: "" },
+  { name: "잠시만요", mediaUrl: "" },
+  { name: "다시 말해주세요", mediaUrl: "" },
+  { name: "수고하셨습니다", mediaUrl: "" },
+];
 
 function resolveQuickSlotBaseUrl(): string {
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
@@ -72,26 +83,77 @@ function toQuickSlotMap(slots: QuickSlotValue[]): QuickSlotMap {
   }, {});
 }
 
+function readLocalActions(): QuickAction[] {
+  if (typeof window === "undefined") return DEFAULT_ACTIONS;
+  try {
+    const stored = localStorage.getItem(LOCAL_ACTIONS_KEY);
+    if (!stored) return DEFAULT_ACTIONS;
+    const parsed = JSON.parse(stored);
+    const actions = normalizeQuickActions(parsed);
+    return actions.length > 0 ? actions : DEFAULT_ACTIONS;
+  } catch {
+    return DEFAULT_ACTIONS;
+  }
+}
+
+function readLocalSlots(): QuickSlotValue[] {
+  if (typeof window === "undefined") return normalizeQuickSlots(null);
+  try {
+    return normalizeQuickSlots(JSON.parse(localStorage.getItem(LOCAL_MY_SLOTS_KEY) ?? "null"));
+  } catch {
+    return normalizeQuickSlots(null);
+  }
+}
+
+function writeLocalSlots(slots: QuickSlotValue[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LOCAL_MY_SLOTS_KEY, JSON.stringify(toQuickSlotMap(slots)));
+}
+
 export const quickSlotApi = {
   slotCount: SLOT_COUNT,
 
   getAll: async (): Promise<QuickAction[]> => {
-    const { data } = await quickSlotHttp.get("/quick-slots");
-    const body = data.data ?? data;
-    return normalizeQuickActions(body?.quickActions);
+    if (!ENABLE_API) return readLocalActions();
+
+    try {
+      const { data } = await quickSlotHttp.get("/quick-slots");
+      const body = data.data ?? data;
+      const actions = normalizeQuickActions(body?.quickActions);
+      return actions.length > 0 ? actions : readLocalActions();
+    } catch {
+      return readLocalActions();
+    }
   },
 
   getMy: async (): Promise<QuickSlotValue[]> => {
-    const { data } = await quickSlotHttp.get("/quick-slots/me");
-    const body = data.data ?? data;
-    return normalizeQuickSlots(body?.quickSlots);
+    if (!ENABLE_API) return readLocalSlots();
+
+    try {
+      const { data } = await quickSlotHttp.get("/quick-slots/me");
+      const body = data.data ?? data;
+      return normalizeQuickSlots(body?.quickSlots);
+    } catch {
+      return readLocalSlots();
+    }
   },
 
   update: async (slots: QuickSlotValue[]): Promise<QuickSlotValue[]> => {
-    const { data } = await quickSlotHttp.patch("/quick-slots", {
-      quickSlots: toQuickSlotMap(slots),
-    });
-    const body = data.data ?? data;
-    return normalizeQuickSlots(body?.quickSlots);
+    const normalized = normalizeQuickSlots(slots);
+    writeLocalSlots(normalized);
+
+    if (!ENABLE_API) return normalized;
+
+    try {
+      const { data } = await quickSlotHttp.patch("/quick-slots", {
+        quickSlots: toQuickSlotMap(normalized),
+      });
+      const body = data.data ?? data;
+      const updated = normalizeQuickSlots(body?.quickSlots);
+      writeLocalSlots(updated);
+      return updated;
+    } catch {
+      return normalized;
+    }
   },
 };

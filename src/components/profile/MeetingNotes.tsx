@@ -20,6 +20,7 @@ function formatDateTime(value: string) {
 export default function MeetingNotes({ userId }: MeetingNotesProps) {
   const [notes, setNotes] = useState<MeetingNoteRecord[]>([]);
   const [selected, setSelected] = useState<MeetingNoteRecord | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setNotes(getMeetingNotes(userId));
@@ -27,9 +28,19 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <ClipboardList size={17} className="text-[#724BFD]" />
-        <p className="text-[16px] font-bold text-[#333333]">회의록</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ClipboardList size={17} className="text-[#724BFD]" />
+          <p className="text-[16px] font-bold text-[#333333]">회의록</p>
+        </div>
+        {notes.length > 5 && (
+          <button
+            onClick={() => setShowAll(true)}
+            className="text-[13px] text-[#724BFD]"
+          >
+            전체보기
+          </button>
+        )}
       </div>
 
       {notes.length === 0 ? (
@@ -60,6 +71,50 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
               </p>
             </button>
           ))}
+        </div>
+      )}
+
+      {showAll && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="w-[640px] max-w-full max-h-[80vh] bg-white rounded-[14px] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#EEEEEE]">
+              <p className="text-[16px] font-bold text-[#333333]">회의록 전체보기</p>
+              <button
+                onClick={() => setShowAll(false)}
+                title="닫기"
+                className="w-8 h-8 flex items-center justify-center text-[#AAAAAA] hover:text-[#333333]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto divide-y divide-[#EEEEEE]">
+              {notes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => {
+                    setSelected(note);
+                    setShowAll(false);
+                  }}
+                  className="w-full text-left flex items-center gap-4 px-5 py-3 hover:bg-[#F5F5F5]"
+                >
+                  <div className="w-9 h-9 rounded-full bg-[#E8E2FF] shrink-0 flex items-center justify-center">
+                    <ClipboardList size={16} className="text-[#724BFD]" />
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#333333] truncate">
+                      {note.title}
+                    </p>
+                    <p className="text-[12px] text-[#AAAAAA] truncate">
+                      {note.attendeesText || note.attendees.join(", ")}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-[#AAAAAA] shrink-0">
+                    {formatDateTime(note.createdAt)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

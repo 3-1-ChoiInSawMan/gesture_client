@@ -22,12 +22,9 @@ const activities = [
 export default function RecentActivity() {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Video size={17} className="text-[#724BFD]" />
-          <p className="text-[16px] font-bold text-[#333333]">내 활동</p>
-        </div>
-        <p className="text-[13px] text-[#724BFD] cursor-pointer">전체보기</p>
+      <div className="flex items-center gap-2">
+        <Video size={17} className="text-[#724BFD]" />
+        <p className="text-[16px] font-bold text-[#333333]">내 활동</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {activities.map((item) => (

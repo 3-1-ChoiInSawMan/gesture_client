@@ -23,7 +23,7 @@ import ParticipantStrip from "./ParticipantStrip";
 import VideoControls from "./VideoControls";
 import ChatPanel from "./ChatPanel";
 import ParticipantsPanel from "./ParticipantsPanel";
-import MeetingNotesPanel from "./MeetingNotesPanel";
+import MeetingNotesPanel, { MeetingNotesDraft } from "./MeetingNotesPanel";
 import InviteModal from "./InviteModal";
 import RoomSettingsModal from "./RoomSettingsModal";
 import VideoRoomTutorial from "./VideoRoomTutorial";
@@ -34,6 +34,7 @@ import { useWebRTC } from "./useWebRTC";
 import { callRoomApi } from "@/api/callRoomApi";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
+import { saveMeetingNote } from "@/lib/meetingNotes";
 
 interface VideoRoomProps {
   roomId: string;
@@ -50,7 +51,6 @@ const MAX_VISIBLE_CAPTIONS = 3;
 export default function VideoRoom({
   roomId,
   roomTitle = "통화방",
-  isHost = false,
   isPrivate = false,
 }: VideoRoomProps) {
   const router = useRouter();
@@ -60,8 +60,10 @@ export default function VideoRoom({
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showMeetingNotice, setShowMeetingNotice] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
+  const [meetingNotesDraft, setMeetingNotesDraft] = useState<MeetingNotesDraft>({ title: "" });
+  const meetingStartedAtRef = useRef(new Date());
+  const meetingNoteSavedRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -487,27 +489,44 @@ export default function VideoRoom({
   // ── 방 정보 ──────────────────────────────────────────────
   const [currentRoomTitle, setCurrentRoomTitle] = useState(roomTitle);
   const [currentIsPrivate, setCurrentIsPrivate] = useState(isPrivate);
-  const [currentIsHost, setCurrentIsHost] = useState(isHost);
   const [currentCode, setCurrentCode] = useState("1234");
 
   useEffect(() => {
     callRoomApi.getRoom(roomId).then((room) => {
       setCurrentRoomTitle(room.title);
       setCurrentIsPrivate(!(room.isPublic ?? true));
-      if (user && room.host) {
-        setCurrentIsHost(user.id === room.host.userName);
-      }
     }).catch(() => {});
-  }, [roomId, user]);
+  }, [roomId]);
 
   const togglePanel = useCallback((panel: Exclude<ActivePanel, null>) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   }, []);
 
   const handleOpenMeetingNotes = useCallback(() => {
-    if (!currentIsHost) { setShowMeetingNotice(true); return; }
     togglePanel("meeting-notes");
-  }, [currentIsHost, togglePanel]);
+  }, [togglePanel]);
+
+  const meetingAttendees = useMemo(() => {
+    const names = participants.map((participant) => participant.name).filter(Boolean);
+    return Array.from(new Set(names));
+  }, [participants]);
+
+  const finalizeMeetingNotes = useCallback(() => {
+    const title = meetingNotesDraft.title.trim();
+    if (!title || meetingNoteSavedRef.current) return;
+
+    saveMeetingNote({
+      userId: user?.id ?? "guest",
+      roomId,
+      roomTitle: currentRoomTitle,
+      title,
+      startedAt: meetingStartedAtRef.current.toISOString(),
+      endedAt: new Date().toISOString(),
+      attendees: meetingAttendees,
+    });
+    meetingNoteSavedRef.current = true;
+    toast.success("회의록이 마이페이지에 저장되었습니다.");
+  }, [currentRoomTitle, meetingAttendees, meetingNotesDraft.title, roomId, user?.id]);
 
   const handleSendMessage = useCallback((message: string) => {
     const newMsg: ChatMessage = {
@@ -523,6 +542,7 @@ export default function VideoRoom({
   }, [user, socketSendMessage]);
 
   const handleEndCall = useCallback(() => {
+    finalizeMeetingNotes();
     sendLeaveBeacon();
     cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
@@ -530,17 +550,21 @@ export default function VideoRoom({
     screenStream?.getTracks().forEach((t) => t.stop());
     sessionStorage.removeItem("currentRoomId");
     router.push("/call");
-  }, [router, cleanupAudio, screenStream, sendLeaveBeacon]);
+  }, [router, cleanupAudio, screenStream, sendLeaveBeacon, finalizeMeetingNotes]);
 
   // 브라우저 닫기/새로고침 시 통화방 나가기
   useEffect(() => {
-    window.addEventListener("pagehide", sendLeaveBeacon);
-    window.addEventListener("beforeunload", sendLeaveBeacon);
-    return () => {
-      window.removeEventListener("pagehide", sendLeaveBeacon);
-      window.removeEventListener("beforeunload", sendLeaveBeacon);
+    const handlePageExit = () => {
+      finalizeMeetingNotes();
+      sendLeaveBeacon();
     };
-  }, [sendLeaveBeacon]);
+    window.addEventListener("pagehide", handlePageExit);
+    window.addEventListener("beforeunload", handlePageExit);
+    return () => {
+      window.removeEventListener("pagehide", handlePageExit);
+      window.removeEventListener("beforeunload", handlePageExit);
+    };
+  }, [sendLeaveBeacon, finalizeMeetingNotes]);
 
   // 방 존재 여부 5초 폴링 — 서버가 room_deleted 이벤트를 지원하지 않으므로
   // getRoom 404 응답으로 방 삭제를 감지
@@ -666,14 +690,6 @@ export default function VideoRoom({
         <RemoteAudio key={p.id} stream={p.stream!} />
       ))}
 
-      {showMeetingNotice && (
-        <MeetingNotesPanel
-          isHost={false}
-          onClose={() => setShowMeetingNotice(false)}
-          onDismissNotice={() => setShowMeetingNotice(false)}
-        />
-      )}
-
       {stripParticipants.length === 0 ? (
         <div className="flex items-center justify-center bg-black px-4 py-5 h-[154px]">
           <div className="flex flex-col items-center gap-3">
@@ -787,8 +803,15 @@ export default function VideoRoom({
               onInvite={() => setShowInviteModal(true)}
             />
           )}
-          {activePanel === "meeting-notes" && currentIsHost && (
-            <MeetingNotesPanel isHost={true} onClose={() => setActivePanel(null)} />
+          {activePanel === "meeting-notes" && (
+            <MeetingNotesPanel
+              draft={meetingNotesDraft}
+              roomTitle={currentRoomTitle}
+              startedAt={meetingStartedAtRef.current}
+              attendees={meetingAttendees}
+              onChange={setMeetingNotesDraft}
+              onClose={() => setActivePanel(null)}
+            />
           )}
         </div>
 

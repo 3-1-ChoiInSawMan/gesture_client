@@ -1,107 +1,89 @@
 "use client";
 
-import { useState } from "react";
 import { X } from "lucide-react";
-import { toast } from "react-toastify";
 
-interface MeetingNotesPanelProps {
-  isHost: boolean;
-  onClose: () => void;
-  onDismissNotice?: () => void;
+export interface MeetingNotesDraft {
+  title: string;
 }
 
-const FIELDS = [
-  { key: "title", label: "회의 제목" },
-  { key: "datetime", label: "회의 일시" },
-  { key: "auditor", label: "감사자" },
-  { key: "content", label: "회의 내용" },
-  { key: "aiSummary", label: "AI 회의 요약" },
-  { key: "conclusion", label: "결론" },
-] as const;
+interface MeetingNotesPanelProps {
+  draft: MeetingNotesDraft;
+  roomTitle: string;
+  startedAt: Date;
+  attendees: string[];
+  onChange: (draft: MeetingNotesDraft) => void;
+  onClose: () => void;
+}
 
-type FieldKey = (typeof FIELDS)[number]["key"];
+function formatDateTime(date: Date) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 
 export default function MeetingNotesPanel({
-  isHost,
+  draft,
+  roomTitle,
+  startedAt,
+  attendees,
+  onChange,
   onClose,
-  onDismissNotice,
 }: MeetingNotesPanelProps) {
-  const [notes, setNotes] = useState<Record<FieldKey, string>>({
-    title: "",
-    datetime: "",
-    auditor: "",
-    content: "",
-    aiSummary: "",
-    conclusion: "",
-  });
-
-  if (!isHost) {
-    return (
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-3 bg-black/80 text-white">
-        <span className="text-[14px] font-medium">
-          회의록은 방장만 생성 가능합니다.
-        </span>
-        <button
-          onClick={onDismissNotice}
-          className="shrink-0 h-[30px] px-4 bg-[#724BFD] text-white text-[12px] font-medium rounded-[8px] hover:bg-[#5f3de0] transition-colors"
-        >
-          확인
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="w-[280px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
-      {/* 헤더 */}
+    <aside className="w-[320px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E6E9EE]">
-        <span className="text-[14px] font-semibold text-[#333]">회의록</span>
+        <span className="text-[14px] font-semibold text-[#333333]">회의록</span>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center text-[#AAAAAA] hover:text-[#333] transition-colors"
+          title="닫기"
+          className="w-7 h-7 flex items-center justify-center text-[#AAAAAA] hover:text-[#333333] transition-colors"
         >
           <X size={16} />
         </button>
       </div>
 
-      {/* 필드 목록 */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1">
-        {FIELDS.map(({ key, label }) => (
-          <div
-            key={key}
-            className="flex flex-col gap-1 py-3 border-b border-[#F5F5F5] last:border-0"
-          >
-            <span className="text-[12px] font-semibold text-[#333]">
-              {label}
-            </span>
-            <input
-              type="text"
-              placeholder={`${label} 입력`}
-              value={notes[key]}
-              onChange={(e) =>
-                setNotes((prev) => ({ ...prev, [key]: e.target.value }))
-              }
-              className="w-full text-[12px] text-[#555] placeholder:text-[#CCCCCC] outline-none bg-transparent border-b border-transparent focus:border-[#724BFD] transition-colors pb-0.5"
-            />
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
+        <label className="flex flex-col gap-2">
+          <span className="text-[12px] font-semibold text-[#333333]">회의록 제목</span>
+          <input
+            value={draft.title}
+            onChange={(event) => onChange({ ...draft, title: event.target.value })}
+            placeholder="회의록 제목을 입력하세요"
+            className="h-10 rounded-[8px] border border-[#E6E9EE] px-3 text-[13px] text-[#333333] outline-none focus:border-[#724BFD]"
+          />
+        </label>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-[12px] font-semibold text-[#333333]">통화방</span>
+          <div className="min-h-10 rounded-[8px] bg-[#F7F7FA] px-3 py-2 text-[13px] text-[#555555]">
+            {roomTitle}
           </div>
-        ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-[12px] font-semibold text-[#333333]">일시</span>
+          <div className="min-h-10 rounded-[8px] bg-[#F7F7FA] px-3 py-2 text-[13px] text-[#555555]">
+            {formatDateTime(startedAt)}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-[12px] font-semibold text-[#333333]">참석자</span>
+          <div className="rounded-[8px] bg-[#F7F7FA] px-3 py-2 text-[13px] text-[#555555] leading-6">
+            {attendees.length > 0 ? attendees.join(", ") : "참석자 확인 중"}
+          </div>
+        </div>
       </div>
 
-      {/* 저장 버튼 */}
       <div className="px-4 py-3 border-t border-[#E6E9EE]">
-        <button
-          onClick={() => {
-            if (!notes.title.trim()) {
-              toast.error("회의 제목을 입력해주세요.");
-              return;
-            }
-            toast.success("회의록이 저장되었습니다.");
-          }}
-          className="w-full h-[38px] bg-[#724BFD] text-white text-[13px] font-medium rounded-[10px] hover:bg-[#5f3de0] transition-colors"
-        >
-          저장
-        </button>
+        <p className="text-[12px] leading-5 text-[#888888]">
+          통화를 나가면 입력한 제목으로 회의록이 생성됩니다.
+        </p>
       </div>
-    </div>
+    </aside>
   );
 }

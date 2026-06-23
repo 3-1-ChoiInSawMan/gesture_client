@@ -10,6 +10,7 @@ import NotificationSettings from "@/components/profile/NotificationSettings";
 import RecentActivity from "@/components/profile/RecentActivity";
 import RecentChats from "@/components/profile/RecentChats";
 import QuickSlots from "@/components/profile/QuickSlots";
+import MeetingNotes from "@/components/profile/MeetingNotes";
 
 export default function ProfilePage() {
   const { user, _hasHydrated } = useAuthStore();
@@ -34,6 +35,7 @@ export default function ProfilePage() {
           </div>
           <div className="flex flex-col gap-5 flex-1">
             <RecentActivity />
+            <MeetingNotes userId={user.id} />
             <RecentChats />
             <QuickSlots />
           </div>

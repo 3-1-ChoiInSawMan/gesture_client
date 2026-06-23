@@ -26,6 +26,18 @@ const nextConfig: NextConfig = {
         destination: `${BACKEND_URL}/api/v1/:path*`,
       },
       {
+        source: "/api/quick-slots/:path*",
+        destination: `${BACKEND_URL}/api/quick-slots/:path*`,
+      },
+      {
+        source: "/api/quick-slots",
+        destination: `${BACKEND_URL}/api/quick-slots`,
+      },
+      {
+        source: "/api/admin/quick-slots/:path*",
+        destination: `${BACKEND_URL}/api/admin/quick-slots/:path*`,
+      },
+      {
         source: "/api/media/:path*",
         destination: `${BACKEND_URL}/api/media/:path*`,
       },

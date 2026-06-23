@@ -6,7 +6,6 @@ export interface MeetingNotesDraft {
   title: string;
   displayDateTime: string;
   attendeesText: string;
-  content: string;
 }
 
 interface MeetingNotesPanelProps {
@@ -66,11 +65,10 @@ export default function MeetingNotesPanel({
         <div className="flex flex-col gap-2">
           <span className="text-[12px] font-semibold text-[#333333]">내용</span>
           <textarea
-            value={draft.content}
-            onChange={(event) => onChange({ ...draft, content: event.target.value })}
-            placeholder="AI가 회의 내용을 채워줄 예정입니다."
+            value="AI가 회의 내용을 채워줄 예정입니다."
+            readOnly
             rows={7}
-            className="resize-none rounded-[8px] border border-[#E6E9EE] px-3 py-2 text-[13px] text-[#333333] leading-6 outline-none focus:border-[#724BFD] placeholder:text-[#AAAAAA]"
+            className="resize-none rounded-[8px] border border-[#E6E9EE] bg-[#F7F7FA] px-3 py-2 text-[13px] text-[#888888] leading-6 outline-none"
           />
         </div>
       </div>

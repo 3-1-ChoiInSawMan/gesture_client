@@ -75,7 +75,6 @@ export default function VideoRoom({
     title: "",
     displayDateTime: formatMeetingDateTime(meetingStartedAtRef.current),
     attendeesText: "",
-    content: "",
   });
   const meetingNoteSavedRef = useRef(false);
   const meetingAttendeesTouchedRef = useRef(false);
@@ -564,7 +563,6 @@ export default function VideoRoom({
       displayDateTime: meetingNotesDraft.displayDateTime.trim(),
       attendees,
       attendeesText,
-      content: meetingNotesDraft.content.trim(),
     });
     meetingNoteSavedRef.current = true;
     toast.success("회의록이 마이페이지에 저장되었습니다.");

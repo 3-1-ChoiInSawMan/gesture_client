@@ -1,25 +1,35 @@
 import Image from "next/image";
+import { NotificationRecord } from "@/api/notificationApi";
 
 export interface NotificationData {
-  id: number;
+  id: number | string;
   user: string;
   handle: string;
   action: string;
   timeLabel: string;
   thumbnail?: string;
-  type: "friend_request" | "mention";
+  type: string;
+  isRead: boolean;
+  raw: NotificationRecord;
 }
 
 interface Props {
   notification: NotificationData;
+  onRead: (notification: NotificationData) => void;
 }
 
-export default function NotificationItem({ notification: n }: Props) {
+export default function NotificationItem({ notification: n, onRead }: Props) {
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0">
+    <button
+      type="button"
+      onClick={() => onRead(n)}
+      className={`w-full text-left flex items-center gap-3 py-3 border-b border-gray-100 last:border-0 transition-colors hover:bg-[#F8F7FF] ${
+        n.isRead ? "opacity-60" : ""
+      }`}
+    >
       <div className="relative w-10 h-10 rounded-full bg-gray-200 flex-shrink-0 overflow-hidden">
         <Image
-          src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${n.handle}`}
+          src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${n.handle || n.user}`}
           alt={n.user}
           unoptimized
           fill
@@ -27,25 +37,24 @@ export default function NotificationItem({ notification: n }: Props) {
         />
       </div>
 
-      <div className="flex-1 text-sm text-gray-700 leading-snug">
-        <span className="font-semibold text-gray-900">{n.user}</span>
-        <span className="text-gray-500">(@{n.handle})</span>
-        {n.action}
-        {n.type !== "mention" && (
-          <span className="ml-2 text-xs text-gray-400">{n.timeLabel}</span>
-        )}
+      <div className="flex-1 text-sm text-gray-700 leading-snug min-w-0">
+        <div className="line-clamp-2">
+          <span className="font-semibold text-gray-900">{n.user}</span>
+          {n.handle && <span className="text-gray-500">(@{n.handle})</span>}
+          <span>{n.action}</span>
+        </div>
+        <span className="text-xs text-gray-400">{n.timeLabel}</span>
       </div>
 
-      {n.type === "friend_request" && (
-        <button className="flex-shrink-0 bg-[#724BFD] text-white text-sm px-4 py-1.5 rounded-lg hover:bg-[#5f3de0] transition-colors">
-          수락
-        </button>
+      {!n.isRead && (
+        <span className="w-2 h-2 rounded-full bg-[#724BFD] flex-shrink-0" />
       )}
-      {n.type === "mention" && n.thumbnail && (
+
+      {n.thumbnail && (
         <div className="relative w-12 h-12 rounded-lg bg-gray-200 flex-shrink-0 overflow-hidden">
-          <Image src={n.thumbnail} alt="썸네일" fill className="object-cover" />
+          <Image src={n.thumbnail} alt="알림 이미지" fill className="object-cover" />
         </div>
       )}
-    </div>
+    </button>
   );
 }

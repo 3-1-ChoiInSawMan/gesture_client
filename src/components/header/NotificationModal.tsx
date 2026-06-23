@@ -1,31 +1,36 @@
 import NotificationItem, { NotificationData } from "./NotificationItem";
 
-const MOCK_NOTIFICATIONS: NotificationData[] = [
-  {
-    id: 1,
-    user: "임영웅",
-    handle: "now_im_young",
-    action: "님이 친구 요청을 보냈습니다.",
-    timeLabel: "1시간 전",
-    type: "friend_request",
-  },
-  {
-    id: 2,
-    user: "임영웅",
-    handle: "now_im_young",
-    action: "님이 kc방에서 김하온(@noahmik)님을 언급했습니다.",
-    timeLabel: "어제",
-    type: "mention",
-  },
-];
-
 interface Props {
+  notifications: NotificationData[];
+  isLoading: boolean;
   onClose: () => void;
+  onRead: (notification: NotificationData) => void;
 }
 
-export default function NotificationModal({ onClose }: Props) {
-  const today = MOCK_NOTIFICATIONS.filter((n) => n.timeLabel !== "어제");
-  const yesterday = MOCK_NOTIFICATIONS.filter((n) => n.timeLabel === "어제");
+function isToday(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  return date.toDateString() === now.toDateString();
+}
+
+function isYesterday(value: string) {
+  const date = new Date(value);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return date.toDateString() === yesterday.toDateString();
+}
+
+export default function NotificationModal({
+  notifications,
+  isLoading,
+  onClose,
+  onRead,
+}: Props) {
+  const today = notifications.filter((n) => isToday(n.raw.created_at));
+  const yesterday = notifications.filter((n) => isYesterday(n.raw.created_at));
+  const older = notifications.filter(
+    (n) => !isToday(n.raw.created_at) && !isYesterday(n.raw.created_at),
+  );
 
   return (
     <>
@@ -40,19 +45,40 @@ export default function NotificationModal({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="h-full overflow-y-auto px-5 py-5">
-          {today.length > 0 && (
+          {isLoading && (
+            <div className="h-full flex items-center justify-center text-sm text-gray-400">
+              알림을 불러오는 중입니다.
+            </div>
+          )}
+
+          {!isLoading && notifications.length === 0 && (
+            <div className="h-full flex items-center justify-center text-sm text-gray-400">
+              받은 알림이 없습니다.
+            </div>
+          )}
+
+          {!isLoading && today.length > 0 && (
             <div className="mb-4 border-b border-[#E6E9EE]">
               {today.map((n) => (
-                <NotificationItem key={n.id} notification={n} />
+                <NotificationItem key={n.id} notification={n} onRead={onRead} />
               ))}
             </div>
           )}
 
-          {yesterday.length > 0 && (
-            <div>
+          {!isLoading && yesterday.length > 0 && (
+            <div className="mb-4 border-b border-[#E6E9EE]">
               <p className="text-sm font-semibold text-gray-500 mb-3">어제</p>
               {yesterday.map((n) => (
-                <NotificationItem key={n.id} notification={n} />
+                <NotificationItem key={n.id} notification={n} onRead={onRead} />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && older.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-gray-500 mb-3">이전</p>
+              {older.map((n) => (
+                <NotificationItem key={n.id} notification={n} onRead={onRead} />
               ))}
             </div>
           )}

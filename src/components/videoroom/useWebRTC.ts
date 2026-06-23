@@ -723,15 +723,6 @@ export function useWebRTC(params: {
           : payload?.participants ?? payload?.users ?? [];
         participants.forEach((participant) => {
           upsertSocketParticipant(participant);
-          window.setTimeout(() => {
-            const peerId = participant.socketId ?? participant.fromSocketId;
-            const entry = peerId ? peersRef.current.get(peerId) : undefined;
-            if (peerId && !isPeerConnected(entry)) {
-              createOfferForParticipant(participant).catch((error) => {
-                if (shouldLogSocket) console.warn("[WebRTC] recovery offer failed:", peerId, error);
-              });
-            }
-          }, 5000);
         });
       };
 
@@ -876,6 +867,9 @@ export function useWebRTC(params: {
             pc = createPeer(peerId);
             // ?됰꽕?꾩? ?섏쨷???낅뜲?댄듃 ???쇰떒 placeholder濡?異붽?
             upsertSocketParticipant({ socketId: peerId, userIdx, nickname });
+          } else if (pc.signalingState !== "stable") {
+            console.log("[WebRTC] offer ignored: signalingState", peerId, pc.signalingState);
+            return;
           }
 
           const entry = peersRef.current.get(peerId)!;
@@ -982,6 +976,10 @@ export function useWebRTC(params: {
                   remoteAnswerSignature,
                 });
                 peer.lastRemoteAnswerSdp = data.sdp;
+                return;
+              }
+              if (peer.pc.signalingState !== "have-local-offer") {
+                console.log("[WebRTC] answer ignored before setRemoteDescription:", peerId, peer.pc.signalingState);
                 return;
               }
               await peer.pc.setRemoteDescription({ type: "answer", sdp: data.sdp });

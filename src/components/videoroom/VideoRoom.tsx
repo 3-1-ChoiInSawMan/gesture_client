@@ -77,7 +77,11 @@ export default function VideoRoom({
     attendeesText: "",
   });
   const meetingNoteSavedRef = useRef(false);
+  const meetingNoteRecordingRef = useRef(false);
+  const meetingNoteStartedAtRef = useRef<Date | null>(null);
   const meetingAttendeesTouchedRef = useRef(false);
+  const meetingDateTouchedRef = useRef(false);
+  const [isMeetingNoteRecording, setIsMeetingNoteRecording] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -540,25 +544,44 @@ export default function VideoRoom({
       if (draft.attendeesText !== defaultAttendeesText) {
         meetingAttendeesTouchedRef.current = true;
       }
+      if (draft.displayDateTime !== meetingNotesDraft.displayDateTime) {
+        meetingDateTouchedRef.current = true;
+      }
       setMeetingNotesDraft(draft);
     },
-    [defaultAttendeesText]
+    [defaultAttendeesText, meetingNotesDraft.displayDateTime]
   );
 
+  const handleStartMeetingNotes = useCallback(() => {
+    if (meetingNoteRecordingRef.current) return;
+    const startedAt = new Date();
+    meetingNoteRecordingRef.current = true;
+    meetingNoteStartedAtRef.current = startedAt;
+    setIsMeetingNoteRecording(true);
+    if (!meetingDateTouchedRef.current) {
+      setMeetingNotesDraft((prev) => ({
+        ...prev,
+        displayDateTime: formatMeetingDateTime(startedAt),
+      }));
+    }
+    toast.success("회의록 생성을 시작했습니다.");
+  }, []);
+
   const finalizeMeetingNotes = useCallback(() => {
-    const title = meetingNotesDraft.title.trim();
-    if (!title || meetingNoteSavedRef.current) return;
+    if (!meetingNoteRecordingRef.current || meetingNoteSavedRef.current) return;
+    const title = meetingNotesDraft.title.trim() || "회의록";
     const attendeesText = meetingNotesDraft.attendeesText.trim();
     const attendees = attendeesText
       ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
       : meetingAttendees;
+    const startedAt = meetingNoteStartedAtRef.current ?? meetingStartedAtRef.current;
 
     saveMeetingNote({
       userId: user?.id ?? "guest",
       roomId,
       roomTitle: currentRoomTitle,
       title,
-      startedAt: meetingStartedAtRef.current.toISOString(),
+      startedAt: startedAt.toISOString(),
       endedAt: new Date().toISOString(),
       displayDateTime: meetingNotesDraft.displayDateTime.trim(),
       attendees,
@@ -846,7 +869,9 @@ export default function VideoRoom({
           {activePanel === "meeting-notes" && (
             <MeetingNotesPanel
               draft={meetingNotesDraft}
+              isRecording={isMeetingNoteRecording}
               onChange={handleChangeMeetingNotes}
+              onStart={handleStartMeetingNotes}
               onClose={() => setActivePanel(null)}
             />
           )}

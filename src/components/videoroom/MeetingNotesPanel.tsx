@@ -10,13 +10,17 @@ export interface MeetingNotesDraft {
 
 interface MeetingNotesPanelProps {
   draft: MeetingNotesDraft;
+  isRecording: boolean;
   onChange: (draft: MeetingNotesDraft) => void;
+  onStart: () => void;
   onClose: () => void;
 }
 
 export default function MeetingNotesPanel({
   draft,
+  isRecording,
   onChange,
+  onStart,
   onClose,
 }: MeetingNotesPanelProps) {
   return (
@@ -33,6 +37,18 @@ export default function MeetingNotesPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
+        <button
+          onClick={onStart}
+          disabled={isRecording}
+          className={`h-10 rounded-[8px] text-[13px] font-semibold transition-colors ${
+            isRecording
+              ? "bg-[#E8E2FF] text-[#724BFD] cursor-default"
+              : "bg-[#724BFD] text-white hover:bg-[#5f3de0]"
+          }`}
+        >
+          {isRecording ? "회의록 생성 중" : "회의록 생성 시작하기"}
+        </button>
+
         <label className="flex flex-col gap-2">
           <span className="text-[12px] font-semibold text-[#333333]">회의록 제목</span>
           <input
@@ -75,7 +91,7 @@ export default function MeetingNotesPanel({
 
       <div className="px-4 py-3 border-t border-[#E6E9EE]">
         <p className="text-[12px] leading-5 text-[#888888]">
-          통화를 나가면 입력한 제목으로 회의록이 생성됩니다.
+          시작 버튼을 누른 뒤 통화를 나가면 회의록이 생성됩니다.
         </p>
       </div>
     </aside>

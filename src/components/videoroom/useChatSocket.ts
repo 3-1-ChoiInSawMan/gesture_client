@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import { ChatMessage } from "./types";
+import { ChatMessage, Participant } from "./types";
 
 function getWsOrigin(): string {
   // HTTPS 환경: 같은 origin으로 연결 → Vercel rewrite가 socket.io를 백엔드로 프록시
@@ -19,14 +19,20 @@ function getWsOrigin(): string {
 
 export function useChatSocket(
   roomId: string,
+  participants: Participant[],
   onMessage: (msg: ChatMessage) => void
 ) {
   const socketRef = useRef<Socket | null>(null);
   const onMessageRef = useRef(onMessage);
+  const participantsRef = useRef(participants);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  useEffect(() => {
+    participantsRef.current = participants;
+  }, [participants]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -43,8 +49,10 @@ export function useChatSocket(
         ? ["polling"]
         : ["websocket"];
 
-    const socket = io(origin, {
+    const socket = io(`${origin}/chat`, {
       auth: { token: token ?? "" },
+      query: { token: token ?? "" },
+      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
       transports,
     });
 
@@ -55,34 +63,54 @@ export function useChatSocket(
         socket.disconnect();
         return;
       }
-      socket.emit("join_room", { call_room_id: roomId });
+      socket.emit("join_chat", { roomType: "call", targetIdx: Number(roomId) });
     });
 
-    socket.on("receive_message", (data: { user_id: string; content: string; created_at: string }) => {
-      const time = data.created_at
-        ? new Date(data.created_at).toLocaleTimeString("ko-KR", {
+    socket.on(
+      "receive_message",
+      (data: {
+        roomType?: string;
+        targetIdx?: number;
+        message?: string;
+        content?: string;
+        created_at?: string;
+        createdAt?: string;
+        fromUserIdx?: number;
+        fromSocketId?: string;
+        user_id?: string;
+      }) => {
+        if (data.roomType && data.roomType !== "call") return;
+        if (data.targetIdx !== undefined && String(data.targetIdx) !== String(roomId)) return;
+
+        const createdAt = data.created_at ?? data.createdAt;
+        const time = createdAt
+          ? new Date(createdAt).toLocaleTimeString("ko-KR", {
             hour: "2-digit",
             minute: "2-digit",
           })
-        : new Date().toLocaleTimeString("ko-KR", {
+          : new Date().toLocaleTimeString("ko-KR", {
             hour: "2-digit",
             minute: "2-digit",
           });
+        const participant = participantsRef.current.find(
+          (item) => item.userIdx === data.fromUserIdx
+        );
+        const fallbackId = data.fromUserIdx ? String(data.fromUserIdx) : data.user_id ?? "unknown";
 
-      onMessageRef.current({
-        id: `${Date.now()}-${Math.random()}`,
-        participantId: data.user_id,
-        name: data.user_id,
-        username: data.user_id,
-        message: data.content,
-        time,
-      });
-    });
+        onMessageRef.current({
+          id: `${Date.now()}-${Math.random()}`,
+          participantId: participant?.id ?? data.fromSocketId ?? fallbackId,
+          name: participant?.name ?? `User ${fallbackId}`,
+          username: participant?.username ?? fallbackId,
+          message: data.message ?? data.content ?? "",
+          time,
+        });
+      }
+    );
 
     return () => {
       disposed = true;
       if (socket.connected) {
-        socket.emit("leave_room", { call_room_id: roomId });
         socket.disconnect();
       } else {
         socket.once("connect", () => socket.disconnect());
@@ -93,7 +121,11 @@ export function useChatSocket(
 
   const sendMessage = useCallback(
     (message: string) => {
-      socketRef.current?.emit("send_message", { call_room_id: roomId, content: message });
+      socketRef.current?.emit("send_message", {
+        roomType: "call",
+        targetIdx: Number(roomId),
+        message,
+      });
     },
     [roomId]
   );

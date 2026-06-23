@@ -67,6 +67,7 @@ export default function VideoRoom({
 
   // ── 패널 상태 ─────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const activePanelRef = useRef<ActivePanel>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
@@ -497,12 +498,35 @@ export default function VideoRoom({
 
   // ── 채팅 ────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatBubbles, setChatBubbles] = useState<CaptionItem[]>([]);
+  const chatBubbleTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    activePanelRef.current = activePanel;
+  }, [activePanel]);
+
+  useEffect(() => {
+    const timers = chatBubbleTimersRef.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
+  }, []);
 
   const handleReceiveMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
+    if (activePanelRef.current === "chat") return;
+
+    const id = ++captionIdRef.current;
+    setChatBubbles((prev) => [...prev.slice(-2), { id, name: msg.name, text: msg.message }]);
+    const timer = setTimeout(() => {
+      setChatBubbles((prev) => prev.filter((bubble) => bubble.id !== id));
+      chatBubbleTimersRef.current.delete(id);
+    }, 5000);
+    chatBubbleTimersRef.current.set(id, timer);
   }, []);
 
-  const { sendMessage: socketSendMessage } = useChatSocket(roomId, handleReceiveMessage);
+  const { sendMessage: socketSendMessage } = useChatSocket(roomId, participants, handleReceiveMessage);
 
   // ── 방 정보 ──────────────────────────────────────────────
   const [currentRoomTitle, setCurrentRoomTitle] = useState(roomTitle);
@@ -820,6 +844,23 @@ export default function VideoRoom({
                         {" : "}
                         {caption.text}
                       </p>
+                    ))}
+                  </div>
+                )}
+
+                {activePanel !== "chat" && chatBubbles.length > 0 && (
+                  <div className="absolute bottom-16 left-4 flex flex-col gap-2 pointer-events-none z-30 max-w-[70%]">
+                    {chatBubbles.map((bubble) => (
+                      <div
+                        key={bubble.id}
+                        className="bg-white/95 text-[#333333] border border-white/40 px-4 py-2 rounded-[14px] shadow-lg"
+                      >
+                        <p className="text-[13px] leading-5 break-words">
+                          <span className="font-bold text-[#724BFD]">{bubble.name}</span>
+                          {" : "}
+                          {bubble.text}
+                        </p>
+                      </div>
                     ))}
                   </div>
                 )}

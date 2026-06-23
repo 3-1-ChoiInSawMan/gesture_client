@@ -48,6 +48,15 @@ type CaptionItem = { id: number; name: string; text: string };
 const VIDEO_ROOM_TUTORIAL_KEY = "gesture_video_room_tutorial_v1";
 const MAX_VISIBLE_CAPTIONS = 3;
 
+function formatMeetingDateTime(date: Date) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+  }).format(date);
+}
+
 export default function VideoRoom({
   roomId,
   roomTitle = "통화방",
@@ -61,9 +70,15 @@ export default function VideoRoom({
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
-  const [meetingNotesDraft, setMeetingNotesDraft] = useState<MeetingNotesDraft>({ title: "" });
   const meetingStartedAtRef = useRef(new Date());
+  const [meetingNotesDraft, setMeetingNotesDraft] = useState<MeetingNotesDraft>({
+    title: "",
+    displayDateTime: formatMeetingDateTime(meetingStartedAtRef.current),
+    attendeesText: "",
+    content: "",
+  });
   const meetingNoteSavedRef = useRef(false);
+  const meetingAttendeesTouchedRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -511,9 +526,33 @@ export default function VideoRoom({
     return Array.from(new Set(names));
   }, [participants]);
 
+  const defaultAttendeesText = useMemo(
+    () => meetingAttendees.join(", "),
+    [meetingAttendees]
+  );
+
+  useEffect(() => {
+    if (meetingAttendeesTouchedRef.current) return;
+    setMeetingNotesDraft((prev) => ({ ...prev, attendeesText: defaultAttendeesText }));
+  }, [defaultAttendeesText]);
+
+  const handleChangeMeetingNotes = useCallback(
+    (draft: MeetingNotesDraft) => {
+      if (draft.attendeesText !== defaultAttendeesText) {
+        meetingAttendeesTouchedRef.current = true;
+      }
+      setMeetingNotesDraft(draft);
+    },
+    [defaultAttendeesText]
+  );
+
   const finalizeMeetingNotes = useCallback(() => {
     const title = meetingNotesDraft.title.trim();
     if (!title || meetingNoteSavedRef.current) return;
+    const attendeesText = meetingNotesDraft.attendeesText.trim();
+    const attendees = attendeesText
+      ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
+      : meetingAttendees;
 
     saveMeetingNote({
       userId: user?.id ?? "guest",
@@ -522,11 +561,14 @@ export default function VideoRoom({
       title,
       startedAt: meetingStartedAtRef.current.toISOString(),
       endedAt: new Date().toISOString(),
-      attendees: meetingAttendees,
+      displayDateTime: meetingNotesDraft.displayDateTime.trim(),
+      attendees,
+      attendeesText,
+      content: meetingNotesDraft.content.trim(),
     });
     meetingNoteSavedRef.current = true;
     toast.success("회의록이 마이페이지에 저장되었습니다.");
-  }, [currentRoomTitle, meetingAttendees, meetingNotesDraft.title, roomId, user?.id]);
+  }, [currentRoomTitle, meetingAttendees, meetingNotesDraft, roomId, user?.id]);
 
   const handleSendMessage = useCallback((message: string) => {
     const newMsg: ChatMessage = {
@@ -806,9 +848,7 @@ export default function VideoRoom({
           {activePanel === "meeting-notes" && (
             <MeetingNotesPanel
               draft={meetingNotesDraft}
-              startedAt={meetingStartedAtRef.current}
-              attendees={meetingAttendees}
-              onChange={setMeetingNotesDraft}
+              onChange={handleChangeMeetingNotes}
               onClose={() => setActivePanel(null)}
             />
           )}

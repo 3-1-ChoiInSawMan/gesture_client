@@ -84,18 +84,19 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
               <div>
                 <p className="text-[12px] font-semibold text-[#888888]">일시</p>
                 <p className="mt-1 text-[13px] text-[#555555]">
-                  {formatDateTime(selected.startedAt)} - {formatDateTime(selected.endedAt)}
+                  {selected.displayDateTime || `${formatDateTime(selected.startedAt)} - ${formatDateTime(selected.endedAt)}`}
                 </p>
               </div>
               <div>
                 <p className="text-[12px] font-semibold text-[#888888]">참석자</p>
                 <p className="mt-1 text-[13px] text-[#555555] leading-6">
-                  {selected.attendees.join(", ")}
+                  {selected.attendeesText || selected.attendees.join(", ")}
                 </p>
               </div>
               <div className="rounded-[10px] bg-[#F7F7FA] px-4 py-3">
-                <p className="text-[12px] leading-5 text-[#888888]">
-                  회의 내용과 AI 요약은 백엔드 회의록 생성 API가 연결되면 이 영역에 표시됩니다.
+                <p className="text-[12px] font-semibold text-[#888888]">내용</p>
+                <p className="mt-2 whitespace-pre-wrap text-[13px] leading-6 text-[#555555]">
+                  {selected.content || "AI가 회의 내용을 채워줄 예정입니다."}
                 </p>
               </div>
             </div>

@@ -8,7 +8,10 @@ export interface MeetingNoteRecord {
   title: string;
   startedAt: string;
   endedAt: string;
+  displayDateTime?: string;
   attendees: string[];
+  attendeesText?: string;
+  content?: string;
   createdAt: string;
 }
 

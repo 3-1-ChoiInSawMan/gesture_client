@@ -114,15 +114,21 @@ export const notificationApi = {
     onError?: (error: unknown) => void,
   ): (() => void) => {
     const controller = new AbortController();
+    let started = false;
 
     const run = async () => {
+      started = true;
       try {
         const token =
           typeof window !== "undefined"
             ? localStorage.getItem("accessToken")
             : null;
         const response = await fetch(`${resolveApiBaseUrl()}/notifications/`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: {
+            Accept: "text/event-stream",
+            "Cache-Control": "no-cache",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           signal: controller.signal,
         });
 
@@ -155,8 +161,11 @@ export const notificationApi = {
       }
     };
 
-    run();
+    const timer = window.setTimeout(run, 150);
 
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(timer);
+      if (started) controller.abort();
+    };
   },
 };

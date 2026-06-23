@@ -8,7 +8,6 @@ export interface MeetingNotesDraft {
 
 interface MeetingNotesPanelProps {
   draft: MeetingNotesDraft;
-  roomTitle: string;
   startedAt: Date;
   attendees: string[];
   onChange: (draft: MeetingNotesDraft) => void;
@@ -21,13 +20,11 @@ function formatDateTime(date: Date) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit",
   }).format(date);
 }
 
 export default function MeetingNotesPanel({
   draft,
-  roomTitle,
   startedAt,
   attendees,
   onChange,
@@ -56,13 +53,6 @@ export default function MeetingNotesPanel({
             className="h-10 rounded-[8px] border border-[#E6E9EE] px-3 text-[13px] text-[#333333] outline-none focus:border-[#724BFD]"
           />
         </label>
-
-        <div className="flex flex-col gap-2">
-          <span className="text-[12px] font-semibold text-[#333333]">통화방</span>
-          <div className="min-h-10 rounded-[8px] bg-[#F7F7FA] px-3 py-2 text-[13px] text-[#555555]">
-            {roomTitle}
-          </div>
-        </div>
 
         <div className="flex flex-col gap-2">
           <span className="text-[12px] font-semibold text-[#333333]">일시</span>

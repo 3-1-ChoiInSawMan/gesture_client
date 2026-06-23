@@ -14,7 +14,6 @@ function formatDateTime(value: string) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -53,7 +52,7 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
                   {note.title}
                 </p>
                 <p className="text-[12px] text-[#AAAAAA] truncate">
-                  {note.roomTitle} · {note.attendees.join(", ")}
+                  {note.attendees.join(", ")}
                 </p>
               </div>
               <p className="text-[11px] text-[#AAAAAA] shrink-0">
@@ -81,10 +80,6 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
               <div>
                 <p className="text-[12px] font-semibold text-[#888888]">제목</p>
                 <p className="mt-1 text-[15px] font-semibold text-[#333333]">{selected.title}</p>
-              </div>
-              <div>
-                <p className="text-[12px] font-semibold text-[#888888]">통화방</p>
-                <p className="mt-1 text-[13px] text-[#555555]">{selected.roomTitle}</p>
               </div>
               <div>
                 <p className="text-[12px] font-semibold text-[#888888]">일시</p>

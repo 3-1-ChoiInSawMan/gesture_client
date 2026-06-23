@@ -806,7 +806,6 @@ export default function VideoRoom({
           {activePanel === "meeting-notes" && (
             <MeetingNotesPanel
               draft={meetingNotesDraft}
-              roomTitle={currentRoomTitle}
               startedAt={meetingStartedAtRef.current}
               attendees={meetingAttendees}
               onChange={setMeetingNotesDraft}

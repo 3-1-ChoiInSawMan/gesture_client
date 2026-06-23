@@ -1,49 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings, Plus } from "lucide-react";
-import { quickSlotApi, QuickSlot, QuickAction } from "@/api/quickSlotApi";
+import { Settings, Trash2 } from "lucide-react";
+import { quickSlotApi, QuickSlot } from "@/api/quickSlotApi";
 
-const SLOT_COLORS = [
-  "bg-[#FFF3E8]",
-  "bg-[#FFF8E8]",
-  "bg-[#F1F6FF]",
-  "bg-[#EDFFF3]",
-  "bg-[#F8F1FF]",
-];
-
-type SlotValue = QuickSlot | null;
-
-function emptySlots(): SlotValue[] {
-  return Array.from({ length: quickSlotApi.slotCount }, () => null);
-}
-
-function normalizeSlots(slots: SlotValue[]): SlotValue[] {
-  return Array.from(
-    { length: quickSlotApi.slotCount },
-    (_, index) => slots[index] ?? null,
-  );
+function formatCreatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 export default function QuickSlots() {
-  const [mySlots, setMySlots] = useState<SlotValue[]>(emptySlots);
-  const [allSlots, setAllSlots] = useState<QuickAction[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editSlots, setEditSlots] = useState<(string | null)[]>(
-    emptySlots().map(() => null),
-  );
+  const [slots, setSlots] = useState<QuickSlot[]>([]);
+  const [editing, setEditing] = useState<QuickSlot | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const fetchSlots = async () => {
-    const [my, all] = await Promise.all([
-      quickSlotApi.getMy(),
-      quickSlotApi.getAll(),
-    ]);
-    setMySlots(normalizeSlots(my));
-    setAllSlots(all);
-    return normalizeSlots(my);
+    const data = await quickSlotApi.getMy();
+    setSlots(data);
   };
 
   useEffect(() => {
@@ -54,34 +36,46 @@ export default function QuickSlots() {
       .finally(() => setLoading(false));
   }, []);
 
-  const hasSlots = mySlots.some((slot) => slot !== null);
-
-  const handleOpenEdit = () => {
+  const handleOpenEdit = (slot: QuickSlot) => {
     setErrorMessage("");
-    setEditSlots(mySlots.map((slot) => slot?.actionName ?? null));
-    setIsEditing(true);
+    setEditing(slot);
+    setEditName(slot.name);
+    setEditDescription(slot.description);
   };
 
   const handleSave = async () => {
+    if (!editing) return;
     setSaving(true);
     setErrorMessage("");
 
     try {
-      const payload = editSlots.map((name) => {
-        if (!name) return null;
-        const found = allSlots.find((slot) => slot.name === name);
-        return found
-          ? { actionName: found.name, mediaUrl: found.mediaUrl }
-          : null;
+      const updated = await quickSlotApi.update(editing.idx, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        iconUuid: editing.iconUuid,
       });
-
-      const updated = await quickSlotApi.update(payload);
-      setMySlots(normalizeSlots(updated));
-      setIsEditing(false);
+      setSlots((prev) =>
+        prev
+          .map((slot) => (slot.idx === updated.idx ? updated : slot))
+          .sort((a, b) => a.order - b.order),
+      );
+      setEditing(null);
     } catch {
-      setErrorMessage("퀵슬롯 저장에 실패했습니다.");
+      setErrorMessage("퀵슬롯 수정에 실패했습니다.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (slot: QuickSlot) => {
+    setErrorMessage("");
+
+    try {
+      await quickSlotApi.remove(slot.idx);
+      setSlots((prev) => prev.filter((item) => item.idx !== slot.idx));
+      if (editing?.idx === slot.idx) setEditing(null);
+    } catch {
+      setErrorMessage("퀵슬롯 삭제에 실패했습니다.");
     }
   };
 
@@ -94,126 +88,105 @@ export default function QuickSlots() {
           <Settings size={17} className="text-[#724BFD]" />
           <p className="text-[16px] font-bold text-[#333333]">퀵슬롯 관리</p>
         </div>
-        {isEditing ? (
-          <div className="flex gap-3">
-            <button
-              onClick={() => setIsEditing(false)}
-              className="text-[13px] text-[#AAAAAA]"
-            >
-              취소
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="text-[13px] text-[#724BFD] font-medium disabled:opacity-50"
-            >
-              {saving ? "저장 중..." : "저장"}
-            </button>
-          </div>
-        ) : (
-          <button onClick={handleOpenEdit} className="flex items-center gap-1">
-            <Settings size={13} className="text-[#724BFD]" />
-            <p className="text-[13px] text-[#724BFD]">슬롯 관리</p>
-          </button>
-        )}
       </div>
 
       {errorMessage && (
         <p className="text-[12px] text-[#FF5555]">{errorMessage}</p>
       )}
 
-      {!isEditing && !hasSlots && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-[#F5F5F5] rounded-[14px] py-8">
-          <p className="text-[13px] text-[#AAAAAA]">등록된 퀵슬롯이 없습니다</p>
-          <button
-            onClick={handleOpenEdit}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#724BFD] rounded-[10px] text-white text-[13px] font-medium"
-          >
-            <Plus size={14} />
-            퀵슬롯 등록하기
-          </button>
+      {slots.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 bg-[#F5F5F5] rounded-[14px] py-8">
+          <p className="text-[13px] text-[#AAAAAA]">업로드한 퀵슬롯이 없습니다</p>
         </div>
-      )}
-
-      {!isEditing && hasSlots && (
-        <div className="grid grid-cols-5 gap-3 flex-1">
-          {mySlots.map((slot, index) => (
-            <div
-              key={index}
-              className={`${SLOT_COLORS[index]} rounded-[14px] flex flex-col items-center justify-center gap-2 min-h-[80px] p-2`}
-            >
-              {slot ? (
-                <>
-                  {slot.mediaUrl && (
-                    <img
-                      src={slot.mediaUrl}
-                      alt={slot.actionName}
-                      className="w-8 h-8 object-contain"
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                    />
-                  )}
-                  <p className="text-[12px] font-medium text-[#333333] text-center leading-tight px-1">
-                    {slot.actionName}
-                  </p>
-                </>
-              ) : (
-                <p className="text-[11px] text-[#AAAAAA]">비어있음</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {isEditing && (
-        <div className="grid grid-cols-5 gap-3 flex-1">
-          {editSlots.map((selected, index) => {
-            const selectedSlot = allSlots.find((slot) => slot.name === selected);
-
-            return (
-              <div
-                key={index}
-                className={`${SLOT_COLORS[index]} rounded-[14px] flex flex-col items-center justify-center gap-2 min-h-[92px] p-2`}
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            {slots.map((slot) => (
+              <button
+                key={slot.idx}
+                onClick={() => handleOpenEdit(slot)}
+                className={`text-left rounded-[14px] border p-3 flex items-center gap-3 transition-colors ${
+                  editing?.idx === slot.idx
+                    ? "border-[#724BFD] bg-[#F8F5FF]"
+                    : "border-[#EEEEEE] bg-white hover:bg-[#F8F8F8]"
+                }`}
               >
-                <p className="text-[11px] font-medium text-[#724BFD]">
-                  슬롯 {index + 1}
-                </p>
-                {allSlots.length === 0 ? (
-                  <p className="text-[10px] text-[#AAAAAA] text-center">
-                    선택 가능한 퀵슬롯이 없습니다
+                <div className="w-11 h-11 rounded-[12px] bg-[#F1ECFF] flex items-center justify-center overflow-hidden shrink-0">
+                  {slot.iconUrl ? (
+                    <video
+                      src={slot.iconUrl}
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Settings size={18} className="text-[#724BFD]" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-[#333333] truncate">
+                    {slot.name}
                   </p>
-                ) : (
-                  <select
-                    value={selected ?? ""}
-                    onChange={(event) => {
-                      const next = [...editSlots];
-                      next[index] = event.target.value || null;
-                      setEditSlots(next);
-                    }}
-                    className="w-full text-[11px] bg-white border border-[#D9D9D9] rounded-[8px] px-1.5 py-1 text-[#333333] cursor-pointer outline-none"
-                  >
-                    <option value="">없음</option>
-                    {allSlots.map((slot) => (
-                      <option key={slot.name} value={slot.name}>
-                        {slot.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {selectedSlot?.mediaUrl && (
-                  <img
-                    src={selectedSlot.mediaUrl}
-                    alt={selectedSlot.name}
-                    className="w-7 h-7 object-contain"
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                    }}
-                  />
-                )}
+                  <p className="text-[11px] text-[#AAAAAA] truncate">
+                    {slot.description || "설명 없음"}
+                  </p>
+                  <p className="text-[10px] text-[#C0C0C0]">
+                    {formatCreatedAt(slot.createdAt)}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {editing && (
+            <div className="rounded-[14px] border border-[#EEEEEE] bg-white p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[14px] font-semibold text-[#333333]">퀵슬롯 수정</p>
+                <button
+                  onClick={() => handleDelete(editing)}
+                  className="flex items-center gap-1 text-[12px] text-[#FF5555]"
+                >
+                  <Trash2 size={13} />
+                  삭제
+                </button>
               </div>
-            );
-          })}
+
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] text-[#777777]">이름</span>
+                <input
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  className="h-9 rounded-[8px] border border-[#DDDDDD] px-3 text-[13px] text-[#333333] outline-none focus:border-[#724BFD]"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] text-[#777777]">설명</span>
+                <textarea
+                  value={editDescription}
+                  onChange={(event) => setEditDescription(event.target.value)}
+                  rows={3}
+                  className="resize-none rounded-[8px] border border-[#DDDDDD] px-3 py-2 text-[13px] text-[#333333] outline-none focus:border-[#724BFD]"
+                />
+              </label>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setEditing(null)}
+                  className="px-3 py-2 text-[13px] text-[#999999]"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !editName.trim()}
+                  className="px-4 py-2 rounded-[8px] bg-[#724BFD] text-white text-[13px] font-medium disabled:opacity-50"
+                >
+                  {saving ? "저장 중..." : "저장"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

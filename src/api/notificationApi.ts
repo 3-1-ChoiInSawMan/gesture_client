@@ -28,9 +28,6 @@ type NotificationPayload = {
   notification?: NotificationRecord;
 };
 
-const ENABLE_NOTIFICATION_SSE =
-  process.env.NEXT_PUBLIC_ENABLE_NOTIFICATION_SSE === "true";
-
 function resolveApiBaseUrl(): string {
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
     return "/api/v1";
@@ -116,11 +113,6 @@ export const notificationApi = {
     onNotifications: (notifications: NotificationRecord[]) => void,
     onError?: (error: unknown) => void,
   ): (() => void) => {
-    if (!ENABLE_NOTIFICATION_SSE) {
-      onNotifications([]);
-      return () => {};
-    }
-
     const controller = new AbortController();
 
     const run = async () => {
@@ -129,7 +121,7 @@ export const notificationApi = {
           typeof window !== "undefined"
             ? localStorage.getItem("accessToken")
             : null;
-        const response = await fetch(`${resolveApiBaseUrl()}/notifications/subscribe`, {
+        const response = await fetch(`${resolveApiBaseUrl()}/notifications/`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           signal: controller.signal,
         });

@@ -37,6 +37,7 @@ api.interceptors.request.use((config) => {
 
 // 응답 인터셉터: 401/403 시 자동 토큰 갱신
 type RefreshPayload = {
+  idx?: number;
   accessToken?: string;
   access_token?: string;
   refreshToken?: string;
@@ -72,7 +73,11 @@ export const refreshAccessToken = (): Promise<string> => {
       { refresh_token: refreshToken },
       { headers: { "Content-Type": "application/json" } }
     );
-    const envelope = response.data as { data?: RefreshPayload } & RefreshPayload;
+    const envelope = response.data as {
+      success?: boolean;
+      statusCode?: string;
+      data?: RefreshPayload;
+    } & RefreshPayload;
     const payload = envelope.data ?? envelope;
     const accessToken =
       payload.accessToken ??
@@ -82,6 +87,9 @@ export const refreshAccessToken = (): Promise<string> => {
       readBearerToken(response.headers.authorization) ??
       (typeof response.headers["x-access-token"] === "string"
         ? response.headers["x-access-token"]
+        : undefined) ??
+      (envelope.statusCode === "SC_000" && Number(payload.idx) > 0
+        ? refreshToken
         : undefined);
     const rotatedRefreshToken =
       payload.refreshToken ??
@@ -146,7 +154,13 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    console.error(`[API ${status ?? "ERR"}] ${method} ${url} →`, message, error.response?.data ?? "");
+    if (!error.response) {
+      console.error(
+        `[API ${status ?? "ERR"}] ${method} ${url} →`,
+        message,
+        error
+      );
+    }
 
     // 인증 엔드포인트는 토큰 갱신 로직 스킵
     if (AUTH_SKIP.some((path) => url.includes(path))) {
@@ -194,7 +208,7 @@ api.interceptors.response.use(
       original.headers.set("Authorization", `Bearer ${newAccess}`);
       return api(original);
     } catch (err) {
-      console.error("[Auth] 리프레시 토큰 갱신 실패:", err);
+      console.warn("[Auth] 리프레시 토큰 갱신 실패:", err);
       // 네트워크 장애로 사용자를 로그아웃시키지 않고, refresh token이
       // 실제로 거부된 경우에만 세션을 종료한다.
       if (isRejectedRefreshToken(err) && typeof window !== "undefined") {

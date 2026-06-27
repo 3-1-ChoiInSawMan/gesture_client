@@ -12,7 +12,30 @@ function joinCall(roomId: string): Promise<JoinCallResponse> {
   const existing = joinRequests.get(roomId);
   if (existing) return existing;
 
-  const request = callRoomApi.joinCall(roomId).catch((error) => {
+  const request = callRoomApi.joinCall(roomId).catch(async (error) => {
+    const status = (
+      error as { response?: { status?: number; data?: { message?: string } } }
+    )?.response;
+    const message = status?.data?.message ?? "";
+    const isAlreadyJoined =
+      status?.status === 409 ||
+      message.includes("이미 참여") ||
+      message.toLowerCase().includes("already");
+
+    if (isAlreadyJoined) {
+      const currentCall = await callRoomApi.getCallParticipants(roomId);
+      if (currentCall.callIdx) {
+        return {
+          callIdx: currentCall.callIdx,
+          roomIdx: currentCall.roomIdx,
+          userIdx: 0,
+          joinedAt: "",
+          currentParticipant: currentCall.currentParticipant,
+          maxParticipant: 0,
+        };
+      }
+    }
+
     joinRequests.delete(roomId);
     throw error;
   });

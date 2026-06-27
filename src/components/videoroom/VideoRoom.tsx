@@ -308,14 +308,16 @@ export default function VideoRoom({
     const url = isHostLeaving
       ? `${baseUrl}/call-rooms/${roomId}`
       : `${baseUrl}/call-rooms/${roomId}/leave`;
-    fetch(`${baseUrl}/calls/${roomId}/leave`, {
-      method: "DELETE",
-      keepalive: true,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    }).catch(() => {});
+    if (!isHostLeaving) {
+      fetch(`${baseUrl}/calls/${roomId}/leave`, {
+        method: "DELETE",
+        keepalive: true,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }).catch(() => {});
+    }
     fetch(url, {
       method: "DELETE",
       keepalive: true,
@@ -557,6 +559,35 @@ export default function VideoRoom({
     }).catch(() => {});
   }, [roomId]);
 
+  const leaveCurrentRoom = useCallback(async (): Promise<boolean> => {
+    if (leaveCalledRef.current) return false;
+    leaveCalledRef.current = true;
+    const hostRoomId = localStorage.getItem("host_call_room_id");
+    const isHostLeaving = hostRoomId === String(roomId);
+
+    try {
+      if (isHostLeaving) {
+        await callRoomApi.deleteRoom(roomId);
+        localStorage.removeItem("host_call_room_id");
+      } else {
+        try {
+          await callRoomApi.leaveCall(roomId);
+        } catch {
+          // 통화 참여 정보가 이미 정리됐어도 통화방 멤버십 나가기는 계속한다.
+        }
+        await callRoomApi.leaveRoom(roomId);
+      }
+      return true;
+    } catch (error) {
+      leaveCalledRef.current = false;
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response
+          ?.data?.message ?? "통화방 나가기에 실패했습니다.";
+      toast.error(message);
+      return false;
+    }
+  }, [roomId]);
+
   const togglePanel = useCallback((panel: Exclude<ActivePanel, null>) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   }, []);
@@ -769,14 +800,15 @@ export default function VideoRoom({
 
   const handleEndCall = useCallback(async () => {
     await finalizeMeetingNotes();
-    sendLeaveBeacon();
+    const didLeave = await leaveCurrentRoom();
+    if (!didLeave) return;
     cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
     cleanupAudio();
     screenStream?.getTracks().forEach((t) => t.stop());
     sessionStorage.removeItem("currentRoomId");
     router.push("/call");
-  }, [router, cleanupAudio, screenStream, sendLeaveBeacon, finalizeMeetingNotes]);
+  }, [router, cleanupAudio, screenStream, leaveCurrentRoom, finalizeMeetingNotes]);
 
   // 브라우저 닫기/새로고침 시 통화방 나가기
   useEffect(() => {

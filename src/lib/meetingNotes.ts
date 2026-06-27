@@ -2,6 +2,9 @@
 
 export interface MeetingNoteRecord {
   id: string;
+  minutesIdx?: number;
+  callIdx?: number;
+  roomIdx?: number;
   userId: string;
   roomId: string;
   roomTitle: string;
@@ -12,6 +15,9 @@ export interface MeetingNoteRecord {
   attendees: string[];
   attendeesText?: string;
   content?: string;
+  aiSummary?: string | null;
+  conclusion?: Array<string | null>;
+  status?: "IN_PROGRESS" | "ENDED";
   createdAt: string;
 }
 
@@ -43,9 +49,12 @@ export function saveMeetingNote(note: Omit<MeetingNoteRecord, "id" | "createdAt"
   const now = new Date().toISOString();
   const record: MeetingNoteRecord = {
     ...note,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: note.minutesIdx
+      ? `server-${note.minutesIdx}`
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: now,
   };
-  writeAllNotes([record, ...readAllNotes()]);
+  const previous = readAllNotes().filter((item) => item.id !== record.id);
+  writeAllNotes([record, ...previous]);
   return record;
 }

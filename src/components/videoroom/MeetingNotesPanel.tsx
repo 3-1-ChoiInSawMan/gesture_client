@@ -11,6 +11,7 @@ export interface MeetingNotesDraft {
 interface MeetingNotesPanelProps {
   draft: MeetingNotesDraft;
   isRecording: boolean;
+  isStarting: boolean;
   onChange: (draft: MeetingNotesDraft) => void;
   onStart: () => void;
   onClose: () => void;
@@ -19,6 +20,7 @@ interface MeetingNotesPanelProps {
 export default function MeetingNotesPanel({
   draft,
   isRecording,
+  isStarting,
   onChange,
   onStart,
   onClose,
@@ -39,14 +41,18 @@ export default function MeetingNotesPanel({
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-5">
         <button
           onClick={onStart}
-          disabled={isRecording}
+          disabled={isRecording || isStarting}
           className={`h-10 rounded-[8px] text-[13px] font-semibold transition-colors ${
             isRecording
               ? "bg-[#E8E2FF] text-[#724BFD] cursor-default"
               : "bg-[#724BFD] text-white hover:bg-[#5f3de0]"
           }`}
         >
-          {isRecording ? "회의록 생성 중" : "회의록 생성 시작하기"}
+          {isRecording
+            ? "회의록 생성 중"
+            : isStarting
+              ? "회의록 시작 중"
+              : "회의록 생성 시작하기"}
         </button>
 
         <label className="flex flex-col gap-2">

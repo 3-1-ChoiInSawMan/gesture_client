@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ClipboardList, X } from "lucide-react";
+import { meetingApi, MeetingMinutes } from "@/api/meetingApi";
 import { getMeetingNotes, MeetingNoteRecord } from "@/lib/meetingNotes";
 
 interface MeetingNotesProps {
@@ -17,13 +18,109 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function mergeServerMinutes(
+  local: MeetingNoteRecord,
+  minutes: MeetingMinutes
+): MeetingNoteRecord {
+  const summaryParts = [
+    minutes.content,
+    minutes.aiSummary,
+    minutes.conclusion?.filter(Boolean).length
+      ? `결론\n${minutes.conclusion
+          .filter((item): item is string => Boolean(item))
+          .map((item) => `- ${item}`)
+          .join("\n")}`
+      : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    ...local,
+    minutesIdx: minutes.minutesIdx,
+    callIdx: minutes.callIdx,
+    roomIdx: minutes.roomIdx,
+    title: minutes.title ?? local.title,
+    startedAt: minutes.startedAt ?? minutes.meetingDate ?? local.startedAt,
+    endedAt: minutes.endedAt ?? local.endedAt,
+    attendees: minutes.participants ?? local.attendees,
+    attendeesText: (minutes.participants ?? local.attendees).join(", "),
+    content: summaryParts.join("\n\n") || local.content,
+    aiSummary: minutes.aiSummary,
+    conclusion: minutes.conclusion,
+    status: minutes.status,
+  };
+}
+
 export default function MeetingNotes({ userId }: MeetingNotesProps) {
-  const [notes, setNotes] = useState<MeetingNoteRecord[]>([]);
+  const [notes, setNotes] = useState<MeetingNoteRecord[]>(() =>
+    getMeetingNotes(userId)
+  );
   const [selected, setSelected] = useState<MeetingNoteRecord | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    setNotes(getMeetingNotes(userId));
+    let cancelled = false;
+    const localNotes = getMeetingNotes(userId);
+
+    const loadServerNotes = async () => {
+      const indexed = new Map<number, MeetingNoteRecord>();
+      localNotes.forEach((note) => {
+        if (note.minutesIdx) indexed.set(note.minutesIdx, note);
+      });
+
+      const roomIndexes = Array.from(
+        new Set(
+          localNotes
+            .map((note) => note.roomIdx)
+            .filter((roomIdx): roomIdx is number => typeof roomIdx === "number")
+        )
+      );
+      const roomLists = await Promise.all(
+        roomIndexes.map((roomIdx) =>
+          meetingApi.getRoomMinutes(roomIdx).catch(() => [])
+        )
+      );
+      roomLists.flat().forEach((item) => {
+        if (indexed.has(item.minutesIdx)) return;
+        indexed.set(item.minutesIdx, {
+          id: `server-${item.minutesIdx}`,
+          minutesIdx: item.minutesIdx,
+          callIdx: item.callIdx,
+          userId,
+          roomId: "",
+          roomTitle: "회의",
+          title: item.title,
+          startedAt: item.meetingDate,
+          endedAt: item.meetingDate,
+          attendees: [],
+          status: item.status,
+          createdAt: item.meetingDate,
+        });
+      });
+
+      const refreshed = await Promise.all(
+        Array.from(indexed.values()).map(async (note) => {
+          if (!note.minutesIdx) return note;
+          try {
+            const minutes = await meetingApi.getMinutes(note.minutesIdx);
+            return mergeServerMinutes(note, minutes);
+          } catch {
+            return note;
+          }
+        })
+      );
+      const localOnly = localNotes.filter((note) => !note.minutesIdx);
+      const merged = [...refreshed, ...localOnly].sort(
+        (a, b) =>
+          new Date(b.startedAt || b.createdAt).getTime() -
+          new Date(a.startedAt || a.createdAt).getTime()
+      );
+      if (!cancelled) setNotes(merged);
+    };
+
+    void loadServerNotes();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   return (

@@ -16,6 +16,7 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
 }
 import { useRouter } from "next/navigation";
 import { Captions, HelpCircle, MicOff, Settings } from "lucide-react";
+import { io, Socket } from "socket.io-client";
 import StreamVideo from "./StreamVideo";
 import { ActivePanel, ChatMessage, Participant } from "./types";
 import { SCREEN_SHARE_PARTICIPANT } from "./mockData";
@@ -32,6 +33,7 @@ import { useSpeechToText } from "./useSpeechToText";
 import { useChatSocket } from "./useChatSocket";
 import { useWebRTC } from "./useWebRTC";
 import { callRoomApi } from "@/api/callRoomApi";
+import { meetingApi, MeetingMinutes } from "@/api/meetingApi";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
 import { saveMeetingNote } from "@/lib/meetingNotes";
@@ -79,10 +81,14 @@ export default function VideoRoom({
   });
   const meetingNoteSavedRef = useRef(false);
   const meetingNoteRecordingRef = useRef(false);
+  const meetingMinutesRef = useRef<MeetingMinutes | null>(null);
+  const meetingSocketRef = useRef<Socket | null>(null);
+  const meetingNoteFinalizingRef = useRef<Promise<void> | null>(null);
   const meetingNoteStartedAtRef = useRef<Date | null>(null);
   const meetingAttendeesTouchedRef = useRef(false);
   const meetingDateTouchedRef = useRef(false);
   const [isMeetingNoteRecording, setIsMeetingNoteRecording] = useState(false);
+  const [isMeetingNoteStarting, setIsMeetingNoteStarting] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -576,44 +582,166 @@ export default function VideoRoom({
     [defaultAttendeesText, meetingNotesDraft.displayDateTime]
   );
 
-  const handleStartMeetingNotes = useCallback(() => {
-    if (meetingNoteRecordingRef.current) return;
-    const startedAt = new Date();
-    meetingNoteRecordingRef.current = true;
-    meetingNoteStartedAtRef.current = startedAt;
-    setIsMeetingNoteRecording(true);
-    if (!meetingDateTouchedRef.current) {
-      setMeetingNotesDraft((prev) => ({
-        ...prev,
-        displayDateTime: formatMeetingDateTime(startedAt),
-      }));
+  const connectMeetingSocket = useCallback(
+    (minutesIdx: number) => {
+      meetingSocketRef.current?.disconnect();
+      const serverOrigin =
+        window.location.protocol === "https:"
+          ? window.location.origin
+          : (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/v1\/?$/, "");
+      const token = localStorage.getItem("accessToken");
+      const socket = io(`${serverOrigin}/v1/meetings/${minutesIdx}`, {
+        transports: ["websocket", "polling"],
+        auth: token ? { token } : undefined,
+        extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      socket.on("connect", () => {
+        socket.emit("join_room", { call_room_id: String(roomId) });
+      });
+      meetingSocketRef.current = socket;
+    },
+    [roomId]
+  );
+
+  useEffect(
+    () => () => {
+      meetingSocketRef.current?.disconnect();
+      meetingSocketRef.current = null;
+    },
+    []
+  );
+
+  const handleStartMeetingNotes = useCallback(async () => {
+    if (meetingNoteRecordingRef.current || isMeetingNoteStarting) return;
+    setIsMeetingNoteStarting(true);
+
+    try {
+      const call = await callRoomApi.getCallParticipants(roomId);
+      if (!call.callIdx) {
+        throw new Error("진행 중인 통화 정보를 찾을 수 없습니다.");
+      }
+
+      const minutes = await meetingApi.startMinutes(call.callIdx);
+      const startedAt = minutes.startedAt ? new Date(minutes.startedAt) : new Date();
+      const attendeesText = meetingNotesDraft.attendeesText.trim();
+      const attendees = attendeesText
+        ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
+        : meetingAttendees;
+      const title = meetingNotesDraft.title.trim() || "회의록";
+
+      meetingMinutesRef.current = minutes;
+      connectMeetingSocket(minutes.minutesIdx);
+      meetingNoteRecordingRef.current = true;
+      meetingNoteStartedAtRef.current = startedAt;
+      setIsMeetingNoteRecording(true);
+      if (!meetingDateTouchedRef.current) {
+        setMeetingNotesDraft((prev) => ({
+          ...prev,
+          displayDateTime: formatMeetingDateTime(startedAt),
+        }));
+      }
+
+      saveMeetingNote({
+        minutesIdx: minutes.minutesIdx,
+        callIdx: minutes.callIdx,
+        roomIdx: minutes.roomIdx,
+        userId: user?.id ?? "guest",
+        roomId,
+        roomTitle: currentRoomTitle,
+        title,
+        startedAt: startedAt.toISOString(),
+        endedAt: startedAt.toISOString(),
+        displayDateTime: meetingNotesDraft.displayDateTime.trim(),
+        attendees,
+        attendeesText,
+        status: "IN_PROGRESS",
+      });
+      toast.success("회의록 생성을 시작했습니다.");
+    } catch (error) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ??
+        (error as Error)?.message ??
+        "회의록을 시작하지 못했습니다.";
+      toast.error(message);
+    } finally {
+      setIsMeetingNoteStarting(false);
     }
-    toast.success("회의록 생성을 시작했습니다.");
-  }, []);
+  }, [
+    currentRoomTitle,
+    connectMeetingSocket,
+    isMeetingNoteStarting,
+    meetingAttendees,
+    meetingNotesDraft,
+    roomId,
+    user,
+  ]);
 
-  const finalizeMeetingNotes = useCallback(() => {
+  const finalizeMeetingNotes = useCallback(async (): Promise<void> => {
     if (!meetingNoteRecordingRef.current || meetingNoteSavedRef.current) return;
-    const title = meetingNotesDraft.title.trim() || "회의록";
-    const attendeesText = meetingNotesDraft.attendeesText.trim();
-    const attendees = attendeesText
-      ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
-      : meetingAttendees;
-    const startedAt = meetingNoteStartedAtRef.current ?? meetingStartedAtRef.current;
+    if (meetingNoteFinalizingRef.current) return meetingNoteFinalizingRef.current;
 
-    saveMeetingNote({
-      userId: user?.id ?? "guest",
-      roomId,
-      roomTitle: currentRoomTitle,
-      title,
-      startedAt: startedAt.toISOString(),
-      endedAt: new Date().toISOString(),
-      displayDateTime: meetingNotesDraft.displayDateTime.trim(),
-      attendees,
-      attendeesText,
-    });
-    meetingNoteSavedRef.current = true;
-    toast.success("회의록이 마이페이지에 저장되었습니다.");
-  }, [currentRoomTitle, meetingAttendees, meetingNotesDraft, roomId, user?.id]);
+    const task = (async () => {
+      const minutes = meetingMinutesRef.current;
+      if (!minutes?.minutesIdx) return;
+
+      const requestedTitle = meetingNotesDraft.title.trim();
+      const ended = await meetingApi.endMinutes(minutes.minutesIdx);
+      const completed =
+        requestedTitle && requestedTitle !== ended.title
+          ? await meetingApi.updateMinutes(minutes.minutesIdx, {
+              title: requestedTitle,
+            })
+          : ended;
+      const attendeesText = meetingNotesDraft.attendeesText.trim();
+      const attendees =
+        completed.participants?.filter(Boolean) ??
+        (attendeesText
+          ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
+          : meetingAttendees);
+      const startedAt =
+        completed.startedAt ??
+        meetingNoteStartedAtRef.current?.toISOString() ??
+        meetingStartedAtRef.current.toISOString();
+
+      saveMeetingNote({
+        minutesIdx: completed.minutesIdx,
+        callIdx: completed.callIdx,
+        roomIdx: completed.roomIdx,
+        userId: user?.id ?? "guest",
+        roomId,
+        roomTitle: currentRoomTitle,
+        title: completed.title ?? (requestedTitle || "회의록"),
+        startedAt,
+        endedAt: completed.endedAt ?? new Date().toISOString(),
+        displayDateTime: meetingNotesDraft.displayDateTime.trim(),
+        attendees,
+        attendeesText,
+        content: completed.content ?? completed.aiSummary ?? undefined,
+        aiSummary: completed.aiSummary,
+        conclusion: completed.conclusion,
+        status: completed.status ?? "ENDED",
+      });
+      meetingNoteSavedRef.current = true;
+      meetingNoteRecordingRef.current = false;
+      meetingSocketRef.current?.disconnect();
+      meetingSocketRef.current = null;
+      setIsMeetingNoteRecording(false);
+      toast.success("회의록이 마이페이지에 저장되었습니다.");
+    })()
+      .catch((error) => {
+        const message =
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message ?? "회의록 종료에 실패했습니다.";
+        toast.error(message);
+      })
+      .finally(() => {
+        meetingNoteFinalizingRef.current = null;
+      });
+
+    meetingNoteFinalizingRef.current = task;
+    return task;
+  }, [currentRoomTitle, meetingAttendees, meetingNotesDraft, roomId, user]);
 
   const handleSendMessage = useCallback((message: string) => {
     const newMsg: ChatMessage = {
@@ -628,8 +756,8 @@ export default function VideoRoom({
     socketSendMessage(message);
   }, [user, socketSendMessage]);
 
-  const handleEndCall = useCallback(() => {
-    finalizeMeetingNotes();
+  const handleEndCall = useCallback(async () => {
+    await finalizeMeetingNotes();
     sendLeaveBeacon();
     cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
@@ -911,6 +1039,7 @@ export default function VideoRoom({
             <MeetingNotesPanel
               draft={meetingNotesDraft}
               isRecording={isMeetingNoteRecording}
+              isStarting={isMeetingNoteStarting}
               onChange={handleChangeMeetingNotes}
               onStart={handleStartMeetingNotes}
               onClose={() => setActivePanel(null)}

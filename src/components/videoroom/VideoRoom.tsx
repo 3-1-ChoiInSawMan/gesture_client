@@ -41,6 +41,7 @@ import { saveMeetingNote } from "@/lib/meetingNotes";
 
 interface VideoRoomProps {
   roomId: string;
+  callIdx: number;
   roomTitle?: string;
   isHost?: boolean;
   isPrivate?: boolean;
@@ -62,6 +63,7 @@ function formatMeetingDateTime(date: Date) {
 
 export default function VideoRoom({
   roomId,
+  callIdx,
   roomTitle = "통화방",
   isPrivate = false,
 }: VideoRoomProps) {
@@ -306,6 +308,14 @@ export default function VideoRoom({
     const url = isHostLeaving
       ? `${baseUrl}/call-rooms/${roomId}`
       : `${baseUrl}/call-rooms/${roomId}/leave`;
+    fetch(`${baseUrl}/calls/${roomId}/leave`, {
+      method: "DELETE",
+      keepalive: true,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }).catch(() => {});
     fetch(url, {
       method: "DELETE",
       keepalive: true,
@@ -617,12 +627,11 @@ export default function VideoRoom({
     setIsMeetingNoteStarting(true);
 
     try {
-      const call = await callRoomApi.getCallParticipants(roomId);
-      if (!call.callIdx) {
+      if (!callIdx) {
         throw new Error("진행 중인 통화 정보를 찾을 수 없습니다.");
       }
 
-      const minutes = await meetingApi.startMinutes(call.callIdx);
+      const minutes = await meetingApi.startMinutes(callIdx);
       const startedAt = minutes.startedAt ? new Date(minutes.startedAt) : new Date();
       const attendeesText = meetingNotesDraft.attendeesText.trim();
       const attendees = attendeesText
@@ -671,6 +680,7 @@ export default function VideoRoom({
   }, [
     currentRoomTitle,
     connectMeetingSocket,
+    callIdx,
     isMeetingNoteStarting,
     meetingAttendees,
     meetingNotesDraft,

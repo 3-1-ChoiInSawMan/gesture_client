@@ -356,32 +356,10 @@ export default function VideoRoom({
       sendCaption(text);
     },
     onRoomDeleted: handleRoomDeleted,
+    onCallJoined: (callIdx) => {
+      activeCallIdxRef.current = callIdx;
+    },
   });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const resolveCallIdx = async () => {
-      for (let attempt = 0; attempt < 20 && !cancelled; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
-        if (cancelled) return;
-        try {
-          const call = await callRoomApi.getCallParticipants(roomId);
-          if (call.callIdx) {
-            activeCallIdxRef.current = call.callIdx;
-            return;
-          }
-        } catch {
-          // 소켓 입장과 서버 통화 정보 생성 사이의 지연 동안 재시도한다.
-        }
-      }
-    };
-
-    void resolveCallIdx();
-    return () => {
-      cancelled = true;
-    };
-  }, [roomId]);
 
   useSpeechToText(micStream, (text) => {
     const myName = user?.nickname ?? "Unknown";
@@ -684,17 +662,14 @@ export default function VideoRoom({
     try {
       let resolvedCallIdx = activeCallIdxRef.current;
       if (!resolvedCallIdx) {
-        for (let attempt = 0; attempt < 6 && !resolvedCallIdx; attempt += 1) {
-          const call = await callRoomApi.getCallParticipants(roomId);
-          resolvedCallIdx = call.callIdx || null;
-          activeCallIdxRef.current = resolvedCallIdx;
-          if (!resolvedCallIdx) {
-            await new Promise((resolve) => window.setTimeout(resolve, 250));
-          }
-        }
+        const call = await callRoomApi.getCallParticipants(roomId);
+        resolvedCallIdx = call.callIdx || null;
+        activeCallIdxRef.current = resolvedCallIdx;
       }
       if (!resolvedCallIdx) {
-        throw new Error("진행 중인 통화 정보를 찾을 수 없습니다.");
+        throw new Error(
+          "통화 서버에서 회의록에 필요한 통화 정보를 찾을 수 없습니다."
+        );
       }
 
       const minutes = await meetingApi.startMinutes(resolvedCallIdx);

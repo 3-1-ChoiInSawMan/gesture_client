@@ -20,7 +20,7 @@ export default function AddFriendModal({ onClose }: Props) {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<SearchUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<number | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -33,9 +33,11 @@ export default function AddFriendModal({ onClose }: Props) {
   useEffect(() => {
     const keyword = query.trim();
     if (!keyword) {
-      setUsers([]);
-      setLoading(false);
-      return;
+      const resetTimer = window.setTimeout(() => {
+        setUsers([]);
+        setLoading(false);
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
     }
 
     let cancelled = false;
@@ -78,13 +80,13 @@ export default function AddFriendModal({ onClose }: Props) {
     };
   }, [query, currentUser?.id]);
 
-  const sendFriendRequest = async (userId: string) => {
-    setSendingId(userId);
+  const sendFriendRequest = async (userIdx: number) => {
+    setSendingId(userIdx);
     try {
-      await friendApi.sendRequest(userId);
+      await friendApi.sendRequest(userIdx);
       setUsers((prev) =>
         prev.map((user) =>
-          user.id === userId ? { ...user, requestSent: true } : user
+          user.idx === userIdx ? { ...user, requestSent: true } : user
         )
       );
       toast.success("친구 요청을 보냈습니다.");
@@ -143,12 +145,16 @@ export default function AddFriendModal({ onClose }: Props) {
               <p className="py-10 text-center text-[14px] text-[#999999]">친구로 추가할 사용자의 아이디를 검색하세요.</p>
             )}
             {!loading && users.map((user) => {
-              const disabled = user.isFriend || user.requestSent || sendingId === user.id;
+              const disabled =
+                !user.idx ||
+                user.isFriend ||
+                user.requestSent ||
+                sendingId === user.idx;
               const label = user.isFriend
                 ? "친구"
                 : user.requestSent
                   ? "요청됨"
-                  : sendingId === user.id
+                  : sendingId === user.idx
                     ? "전송 중"
                     : "친구 추가";
               return (
@@ -169,7 +175,7 @@ export default function AddFriendModal({ onClose }: Props) {
                   <button
                     type="button"
                     disabled={disabled}
-                    onClick={() => sendFriendRequest(user.id || user.userId)}
+                    onClick={() => sendFriendRequest(Number(user.idx))}
                     className="h-9 rounded-[6px] bg-[#724BFD] px-4 text-[13px] font-semibold text-white hover:bg-[#5F3DE0] disabled:bg-[#EEEEEE] disabled:text-[#999999]"
                   >
                     {label}

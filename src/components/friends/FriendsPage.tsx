@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { useAuthStore } from "@/store/authStore";
@@ -11,14 +11,43 @@ import EmptyChatView from "./EmptyChatView";
 import AddFriendModal from "./modals/AddFriendModal";
 import SendMessageModal from "./modals/SendMessageModal";
 import CreateChatRoomModal from "./modals/CreateChatRoomModal";
+import FriendRequestsModal from "./modals/FriendRequestsModal";
+import { friendApi } from "@/api/friendApi";
 
 export default function FriendsPage() {
-  const { selectedRoomId } = useChatStore();
+  const { selectedRoomId, setRooms } = useChatStore();
   const { user, _hasHydrated } = useAuthStore();
   const router = useRouter();
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
+
+  const loadFriends = useCallback(async () => {
+    const friends = await friendApi.getFriends();
+    setRooms(
+      friends.map((friend) => ({
+        id: `dm-${friend.idx}`,
+        targetUserIdx: friend.idx,
+        name: friend.nickname,
+        isGroup: false,
+        members: [{
+          id: friend.id,
+          nickname: friend.nickname,
+          username: friend.id,
+          profileImage: friend.profileImage,
+        }],
+        lastMessage: "",
+        lastMessageTime: "",
+        avatarUrl: friend.profileImage,
+      }))
+    );
+  }, [setRooms]);
+
+  useEffect(() => {
+    if (!_hasHydrated || !user) return;
+    void loadFriends().catch(() => toast.error("친구 목록을 불러오지 못했습니다."));
+  }, [_hasHydrated, user, loadFriends]);
 
   useEffect(() => {
     if (_hasHydrated && !user) {
@@ -34,6 +63,7 @@ export default function FriendsPage() {
       <ChatSidebar
         onAddFriend={() => setShowAddFriend(true)}
         onCreateRoom={() => setShowCreateRoom(true)}
+        onRequests={() => setShowRequests(true)}
       />
 
       {selectedRoomId ? (
@@ -45,6 +75,12 @@ export default function FriendsPage() {
       {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} />}
       {showSendMessage && <SendMessageModal onClose={() => setShowSendMessage(false)} />}
       {showCreateRoom && <CreateChatRoomModal onClose={() => setShowCreateRoom(false)} />}
+      {showRequests && (
+        <FriendRequestsModal
+          onClose={() => setShowRequests(false)}
+          onChanged={() => void loadFriends()}
+        />
+      )}
     </div>
   );
 }

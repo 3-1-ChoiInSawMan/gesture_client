@@ -1,22 +1,36 @@
 import { create } from "zustand";
 import { ChatRoom, Message } from "@/components/friends/types";
-import { MOCK_ROOMS, MOCK_MESSAGES } from "@/components/friends/mockData";
 
 interface ChatStore {
   rooms: ChatRoom[];
   messages: Record<string, Message[]>;
   selectedRoomId: string | null;
 
+  setRooms: (rooms: ChatRoom[]) => void;
+  addMessage: (roomId: string, message: Message) => void;
   selectRoom: (roomId: string | null) => void;
   sendMessage: (roomId: string, content: string, senderId: string, senderName: string) => void;
   createRoom: (name: string, memberIds: string[], memberNames?: string[], avatarUrl?: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
-  rooms: MOCK_ROOMS,
-  messages: MOCK_MESSAGES,
+  rooms: [],
+  messages: {},
   selectedRoomId: null,
 
+  setRooms: (rooms) => set({ rooms }),
+  addMessage: (roomId, message) =>
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [roomId]: [...(state.messages[roomId] ?? []), message],
+      },
+      rooms: state.rooms.map((room) =>
+        room.id === roomId
+          ? { ...room, lastMessage: message.content, lastMessageTime: message.time }
+          : room
+      ),
+    })),
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
 
   sendMessage: (roomId, content, senderId, senderName) => {
@@ -44,6 +58,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   createRoom: (name, memberIds, memberNames, avatarUrl) => {
     const newRoom: ChatRoom = {
       id: `room-${Date.now()}`,
+      targetUserIdx: memberIds.length === 1 ? Number(memberIds[0]) : undefined,
       name,
       isGroup: memberIds.length > 1,
       members: memberIds.map((id, i) => ({

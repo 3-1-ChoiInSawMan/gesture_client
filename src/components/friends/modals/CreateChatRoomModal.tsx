@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Camera } from "lucide-react";
 import { FriendUser } from "../types";
-import { ALL_USERS } from "../mockData";
 import { useChatStore } from "@/store/chatStore";
 import { chatApi } from "@/api/chatApi";
 import { toast } from "react-toastify";
+import { friendApi } from "@/api/friendApi";
 
 interface Props {
   onClose: () => void;
@@ -25,11 +25,24 @@ export default function CreateChatRoomModal({ onClose }: Props) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [friendQuery, setFriendQuery] = useState("");
   const [addedFriends, setAddedFriends] = useState<FriendUser[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const { createRoom } = useChatStore();
 
+  useEffect(() => {
+    friendApi.getFriends().then((items) => {
+      setFriends(items.map((friend) => ({
+        id: String(friend.idx),
+        nickname: friend.nickname,
+        username: friend.id,
+        profileImage: friend.profileImage,
+        status: "friend",
+      })));
+    }).catch(() => toast.error("친구 목록을 불러오지 못했습니다."));
+  }, []);
+
   const friendResults = friendQuery
-    ? ALL_USERS.filter(
+    ? friends.filter(
         (u) =>
           u.username.toLowerCase().includes(friendQuery.toLowerCase()) &&
           !addedFriends.find((f) => f.id === u.id)

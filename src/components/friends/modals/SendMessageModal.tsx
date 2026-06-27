@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { FriendUser } from "../types";
-import { ALL_USERS } from "../mockData";
 import { useChatStore } from "@/store/chatStore";
 import { toast } from "react-toastify";
+import { friendApi } from "@/api/friendApi";
 
 interface Props {
   onClose: () => void;
@@ -14,6 +14,7 @@ interface Props {
 export default function SendMessageModal({ onClose }: Props) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -24,13 +25,25 @@ export default function SendMessageModal({ onClose }: Props) {
   }, [onClose]);
   const { createRoom } = useChatStore();
 
+  useEffect(() => {
+    friendApi.getFriends().then((items) => {
+      setFriends(items.map((friend) => ({
+        id: String(friend.idx),
+        nickname: friend.nickname,
+        username: friend.id,
+        profileImage: friend.profileImage,
+        status: "friend",
+      })));
+    }).catch(() => toast.error("친구 목록을 불러오지 못했습니다."));
+  }, []);
+
   const filtered: FriendUser[] = query
-    ? ALL_USERS.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()))
+    ? friends.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()))
     : [];
 
   const handleChat = () => {
     if (!selectedId) return;
-    const user = ALL_USERS.find((u) => u.id === selectedId);
+    const user = friends.find((u) => u.id === selectedId);
     if (!user) return;
     createRoom(user.nickname, [selectedId], [user.nickname]);
     toast.success(`${user.nickname}님과의 채팅방이 생성되었습니다.`);

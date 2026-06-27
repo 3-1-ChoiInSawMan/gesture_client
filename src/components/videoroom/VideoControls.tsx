@@ -9,6 +9,7 @@ import {
   Captions,
   MessageSquare,
   ClipboardList,
+  Zap,
   Users,
   PhoneOff,
 } from "lucide-react";
@@ -26,6 +27,7 @@ interface VideoControlsProps {
   onToggleSubtitles: () => void;
   onOpenChat: () => void;
   onOpenMeetingNotes: () => void;
+  onOpenQuickSlots: () => void;
   onOpenParticipants: () => void;
   onEndCall: () => void;
 }
@@ -94,6 +96,7 @@ export default function VideoControls({
   onToggleSubtitles,
   onOpenChat,
   onOpenMeetingNotes,
+  onOpenQuickSlots,
   onOpenParticipants,
   onEndCall,
 }: VideoControlsProps) {
@@ -140,6 +143,12 @@ export default function VideoControls({
           label="회의록"
           onClick={onOpenMeetingNotes}
           active={activePanel === "meeting-notes"}
+        />
+        <ControlButton
+          icon={<Zap size={22} />}
+          label="퀵슬롯"
+          onClick={onOpenQuickSlots}
+          active={activePanel === "quick-slots"}
         />
         <ControlButton
           icon={<Users size={22} />}

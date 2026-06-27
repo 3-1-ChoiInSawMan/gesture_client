@@ -25,6 +25,7 @@ import VideoControls from "./VideoControls";
 import ChatPanel from "./ChatPanel";
 import ParticipantsPanel from "./ParticipantsPanel";
 import MeetingNotesPanel, { MeetingNotesDraft } from "./MeetingNotesPanel";
+import QuickSlotPanel from "./QuickSlotPanel";
 import InviteModal from "./InviteModal";
 import RoomSettingsModal from "./RoomSettingsModal";
 import VideoRoomTutorial from "./VideoRoomTutorial";
@@ -1045,6 +1046,9 @@ export default function VideoRoom({
               onClose={() => setActivePanel(null)}
             />
           )}
+          {activePanel === "quick-slots" && (
+            <QuickSlotPanel onClose={() => setActivePanel(null)} />
+          )}
         </div>
 
         {/* 하단 컨트롤바 */}
@@ -1064,6 +1068,7 @@ export default function VideoRoom({
             onToggleSubtitles={() => setIsSubtitlesOn((v) => !v)}
             onOpenChat={() => togglePanel("chat")}
             onOpenMeetingNotes={handleOpenMeetingNotes}
+            onOpenQuickSlots={() => togglePanel("quick-slots")}
             onOpenParticipants={() => togglePanel("participants")}
             onEndCall={handleEndCall}
           />

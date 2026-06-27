@@ -23,4 +23,9 @@ export interface ChatMessage {
   time: string;
 }
 
-export type ActivePanel = "chat" | "participants" | "meeting-notes" | null;
+export type ActivePanel =
+  | "chat"
+  | "participants"
+  | "meeting-notes"
+  | "quick-slots"
+  | null;

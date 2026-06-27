@@ -86,6 +86,7 @@ export default function VideoRoom({
   const meetingSocketRef = useRef<Socket | null>(null);
   const meetingNoteFinalizingRef = useRef<Promise<void> | null>(null);
   const meetingNoteStartedAtRef = useRef<Date | null>(null);
+  const meetingTranscriptRef = useRef<string[]>([]);
   const meetingAttendeesTouchedRef = useRef(false);
   const meetingDateTouchedRef = useRef(false);
   const [isMeetingNoteRecording, setIsMeetingNoteRecording] = useState(false);
@@ -220,6 +221,9 @@ export default function VideoRoom({
   const speechCaptionQueueRef = useRef<number[]>([]);
 
   const showCaption = useCallback((name: string, text: string) => {
+    if (meetingNoteRecordingRef.current) {
+      meetingTranscriptRef.current.push(`${name}: ${text}`);
+    }
     const id = ++captionIdRef.current;
     captionQueueRef.current.push(id);
     const removedId =
@@ -245,6 +249,9 @@ export default function VideoRoom({
   }, []);
 
   const showSpeechCaption = useCallback((name: string, text: string) => {
+    if (meetingNoteRecordingRef.current) {
+      meetingTranscriptRef.current.push(`${name}: ${text}`);
+    }
     const id = ++captionIdRef.current;
     speechCaptionQueueRef.current.push(id);
     const removedId =
@@ -660,20 +667,13 @@ export default function VideoRoom({
     setIsMeetingNoteStarting(true);
 
     try {
-      let resolvedCallIdx = activeCallIdxRef.current;
-      if (!resolvedCallIdx) {
-        const call = await callRoomApi.getCallParticipants(roomId);
-        resolvedCallIdx = call.callIdx || null;
-        activeCallIdxRef.current = resolvedCallIdx;
-      }
-      if (!resolvedCallIdx) {
-        throw new Error(
-          "통화 서버에서 회의록에 필요한 통화 정보를 찾을 수 없습니다."
-        );
-      }
-
-      const minutes = await meetingApi.startMinutes(resolvedCallIdx);
-      const startedAt = minutes.startedAt ? new Date(minutes.startedAt) : new Date();
+      const resolvedCallIdx = activeCallIdxRef.current;
+      const minutes = resolvedCallIdx
+        ? await meetingApi.startMinutes(resolvedCallIdx)
+        : null;
+      const startedAt = minutes?.startedAt
+        ? new Date(minutes.startedAt)
+        : new Date();
       const attendeesText = meetingNotesDraft.attendeesText.trim();
       const attendees = attendeesText
         ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
@@ -681,7 +681,10 @@ export default function VideoRoom({
       const title = meetingNotesDraft.title.trim() || "회의록";
 
       meetingMinutesRef.current = minutes;
-      connectMeetingSocket(minutes.minutesIdx);
+      meetingTranscriptRef.current = [];
+      if (minutes) {
+        connectMeetingSocket(minutes.minutesIdx);
+      }
       meetingNoteRecordingRef.current = true;
       meetingNoteStartedAtRef.current = startedAt;
       setIsMeetingNoteRecording(true);
@@ -692,22 +695,28 @@ export default function VideoRoom({
         }));
       }
 
-      saveMeetingNote({
-        minutesIdx: minutes.minutesIdx,
-        callIdx: minutes.callIdx,
-        roomIdx: minutes.roomIdx,
-        userId: user?.id ?? "guest",
-        roomId,
-        roomTitle: currentRoomTitle,
-        title,
-        startedAt: startedAt.toISOString(),
-        endedAt: startedAt.toISOString(),
-        displayDateTime: meetingNotesDraft.displayDateTime.trim(),
-        attendees,
-        attendeesText,
-        status: "IN_PROGRESS",
-      });
-      toast.success("회의록 생성을 시작했습니다.");
+      if (minutes) {
+        saveMeetingNote({
+          minutesIdx: minutes.minutesIdx,
+          callIdx: minutes.callIdx,
+          roomIdx: minutes.roomIdx,
+          userId: user?.id ?? "guest",
+          roomId,
+          roomTitle: currentRoomTitle,
+          title,
+          startedAt: startedAt.toISOString(),
+          endedAt: startedAt.toISOString(),
+          displayDateTime: meetingNotesDraft.displayDateTime.trim(),
+          attendees,
+          attendeesText,
+          status: "IN_PROGRESS",
+        });
+        toast.success("회의록 생성을 시작했습니다.");
+      } else {
+        toast.info(
+          "서버 통화 정보가 없어 이 브라우저에서 회의록을 생성합니다."
+        );
+      }
     } catch (error) {
       const message =
         (error as { response?: { data?: { message?: string } } })?.response?.data
@@ -734,7 +743,36 @@ export default function VideoRoom({
 
     const task = (async () => {
       const minutes = meetingMinutesRef.current;
-      if (!minutes?.minutesIdx) return;
+      if (!minutes?.minutesIdx) {
+        const attendeesText = meetingNotesDraft.attendeesText.trim();
+        const attendees = attendeesText
+          ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
+          : meetingAttendees;
+        const startedAt =
+          meetingNoteStartedAtRef.current?.toISOString() ??
+          meetingStartedAtRef.current.toISOString();
+
+        saveMeetingNote({
+          userId: user?.id ?? "guest",
+          roomId,
+          roomTitle: currentRoomTitle,
+          title: meetingNotesDraft.title.trim() || "회의록",
+          startedAt,
+          endedAt: new Date().toISOString(),
+          displayDateTime: meetingNotesDraft.displayDateTime.trim(),
+          attendees,
+          attendeesText,
+          content:
+            meetingTranscriptRef.current.join("\n") ||
+            "기록된 자막이 없습니다.",
+          status: "ENDED",
+        });
+        meetingNoteSavedRef.current = true;
+        meetingNoteRecordingRef.current = false;
+        setIsMeetingNoteRecording(false);
+        toast.success("회의록이 마이페이지에 저장되었습니다.");
+        return;
+      }
 
       const requestedTitle = meetingNotesDraft.title.trim();
       const ended = await meetingApi.endMinutes(minutes.minutesIdx);

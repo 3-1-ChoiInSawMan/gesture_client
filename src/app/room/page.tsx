@@ -8,34 +8,65 @@ import { toast } from "react-toastify";
 
 const joinRequests = new Map<string, Promise<JoinCallResponse>>();
 
+const toJoinCallResponse = (
+  call: Awaited<ReturnType<typeof callRoomApi.getCallParticipants>>
+): JoinCallResponse => ({
+  callIdx: call.callIdx,
+  roomIdx: call.roomIdx,
+  userIdx: 0,
+  joinedAt: "",
+  currentParticipant: call.currentParticipant,
+  maxParticipant: 0,
+});
+
+async function findCurrentCall(
+  roomId: string,
+  attempts = 5
+): Promise<JoinCallResponse | null> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const call = await callRoomApi.getCallParticipants(roomId);
+      if (call.callIdx) return toJoinCallResponse(call);
+    } catch {
+      // 방 생성 직후에는 통화 데이터가 아직 조회되지 않을 수 있다.
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  return null;
+}
+
 function joinCall(roomId: string): Promise<JoinCallResponse> {
   const existing = joinRequests.get(roomId);
   if (existing) return existing;
 
-  const request = callRoomApi.joinCall(roomId).catch(async (error) => {
-    const status = (
-      error as { response?: { status?: number; data?: { message?: string } } }
-    )?.response;
-    const message = status?.data?.message ?? "";
-    const isAlreadyJoined =
-      status?.status === 409 ||
-      message.includes("이미 참여") ||
-      message.toLowerCase().includes("already");
-
-    if (isAlreadyJoined) {
-      const currentCall = await callRoomApi.getCallParticipants(roomId);
-      if (currentCall.callIdx) {
-        return {
-          callIdx: currentCall.callIdx,
-          roomIdx: currentCall.roomIdx,
-          userIdx: 0,
-          joinedAt: "",
-          currentParticipant: currentCall.currentParticipant,
-          maxParticipant: 0,
-        };
-      }
+  const request = (async () => {
+    const isHost =
+      localStorage.getItem("host_call_room_id") === String(roomId);
+    if (isHost) {
+      const currentCall = await findCurrentCall(roomId);
+      if (currentCall) return currentCall;
     }
 
+    try {
+      return await callRoomApi.joinCall(roomId);
+    } catch (error) {
+      const response = (
+        error as { response?: { status?: number; data?: { message?: string } } }
+      )?.response;
+      const message = response?.data?.message ?? "";
+      const isAlreadyJoined =
+        response?.status === 409 ||
+        message.includes("이미 참여") ||
+        message.toLowerCase().includes("already");
+
+      if (isAlreadyJoined) {
+        const currentCall = await findCurrentCall(roomId);
+        if (currentCall) return currentCall;
+      }
+
+      throw error;
+    }
+  })().catch((error) => {
     joinRequests.delete(roomId);
     throw error;
   });

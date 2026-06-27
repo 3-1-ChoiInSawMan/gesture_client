@@ -1,4 +1,4 @@
-import { api } from "./axiosInstance";
+import { api, getValidAccessToken } from "./axiosInstance";
 
 export interface NotificationSetting {
   type: string;
@@ -119,10 +119,7 @@ export const notificationApi = {
     const run = async () => {
       started = true;
       try {
-        const token =
-          typeof window !== "undefined"
-            ? localStorage.getItem("accessToken")
-            : null;
+        const token = await getValidAccessToken();
         const response = await fetch(`${resolveApiBaseUrl()}/notifications/`, {
           headers: {
             Accept: "text/event-stream",

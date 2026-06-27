@@ -5,10 +5,6 @@ import { getCookie, setCookie, deleteCookie } from "@/lib/cookie";
 // 인증 자체 엔드포인트는 토큰 갱신 로직에서 제외
 const AUTH_SKIP = ["/auth/login", "/auth/register", "/auth/email-send", "/auth/email-verification", "/auth/refresh"];
 
-// 비즈니스 도메인 엔드포인트: 401/403 에러를 토큰 만료로 오해하지 않도록 갱신 로직 스킵
-// (예: 비공개 통화방 비밀번호 오류 → 403 or 401, 토큰과 무관)
-const DOMAIN_SKIP = ["/call-rooms"];
-
 // HTTPS 배포 환경에서는 Mixed Content 방지를 위해 상대경로 사용 (Vercel rewrite 경유)
 // HTTP 로컬 개발에서는 NEXT_PUBLIC_API_URL 직접 사용
 function resolveBaseUrl(): string {
@@ -24,15 +20,6 @@ export const api = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
   headers: { "Content-Type": "application/json" },
-});
-
-// 요청 인터셉터: accessToken 자동 첨부
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("accessToken");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 // 응답 인터셉터: 401/403 시 자동 토큰 갱신
@@ -119,12 +106,55 @@ export const refreshAccessToken = (): Promise<string> => {
   return refreshPromise;
 };
 
+const isTokenExpiring = (token: string, bufferSeconds = 60): boolean => {
+  try {
+    const encodedPayload = token.split(".")[1];
+    if (!encodedPayload) return false;
+    const normalized = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(normalized)) as { exp?: number };
+    return (
+      typeof payload.exp === "number" &&
+      payload.exp <= Date.now() / 1000 + bufferSeconds
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const getValidAccessToken = async (): Promise<string | null> => {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("accessToken");
+  if (!token || !isTokenExpiring(token)) return token;
+
+  try {
+    return await refreshAccessToken();
+  } catch {
+    return token;
+  }
+};
+
+// 요청 인터셉터: accessToken 자동 첨부, 만료 임박 시 요청 전에 갱신
+api.interceptors.request.use(async (config) => {
+  if (typeof window === "undefined") return config;
+  const url = config.url ?? "";
+  const token = AUTH_SKIP.some((path) => url.includes(path))
+    ? localStorage.getItem("accessToken")
+    : await getValidAccessToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 // 토큰 만료 여부 판단
 // statusCode가 있으면 우선 체크 — 비즈니스 에러(USER_XXX, ROOM_XXX 등)는 토큰 만료 아님
 // statusCode가 없거나 AUTH 계열일 때만 status/message로 판단
 const isTokenExpired = (status: number, message: string, statusCode?: string) => {
   // 비즈니스 에러 코드가 있으면 토큰 만료 아님
-  if (statusCode && !statusCode.startsWith("AUTH_") && statusCode !== "SC_000") {
+  if (
+    statusCode &&
+    !statusCode.startsWith("AUTH_") &&
+    statusCode !== "TOKEN_100" &&
+    statusCode !== "SC_000"
+  ) {
     return false;
   }
   if (status === 401) return true;
@@ -164,11 +194,6 @@ api.interceptors.response.use(
 
     // 인증 엔드포인트는 토큰 갱신 로직 스킵
     if (AUTH_SKIP.some((path) => url.includes(path))) {
-      return Promise.reject(error);
-    }
-
-    // 비즈니스 도메인 엔드포인트: 401/403이어도 토큰 갱신 시도 없이 caller에게 넘김
-    if (DOMAIN_SKIP.some((path) => url.includes(path))) {
       return Promise.reject(error);
     }
 

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import axios from "axios";
-import { getCookie, setCookie } from "@/lib/cookie";
+import { refreshAccessToken } from "@/api/axiosInstance";
 import { userApi } from "@/api/userApi";
 import { Participant } from "./types";
 
@@ -36,19 +35,8 @@ async function getFreshToken(): Promise<string | null> {
   const exp = typeof payload?.exp === "number" ? payload.exp : null;
   if (exp && exp > Date.now() / 1000 + 30) return token;
 
-  const refreshToken = getCookie("refreshToken");
-  if (!refreshToken) return token;
-
   try {
-    const BASE_URL = window.location.protocol === "https:" ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL ?? "");
-    const { data } = await axios.get(`${BASE_URL}/auth/refresh`, {
-      headers: { Authorization: `Bearer ${refreshToken}` },
-    });
-    const newAccess: string = data.data.accessToken;
-    const newRefresh: string = data.data.refreshToken;
-    localStorage.setItem("accessToken", newAccess);
-    setCookie("refreshToken", newRefresh);
-    return newAccess;
+    return await refreshAccessToken();
   } catch {
     // refresh ?ㅽ뙣 ??湲곗〈 ?좏겙?쇰줈 ?쒕룄
   }

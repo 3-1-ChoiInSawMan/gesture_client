@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosError, AxiosHeaders } from "axios";
 import { toast } from "react-toastify";
 import { getCookie, setCookie, deleteCookie } from "@/lib/cookie";
 
@@ -36,15 +36,79 @@ api.interceptors.request.use((config) => {
 });
 
 // 응답 인터셉터: 401/403 시 자동 토큰 갱신
-let isRefreshing = false;
-let pendingQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (err: unknown) => void;
-}> = [];
+type RefreshPayload = {
+  accessToken?: string;
+  access_token?: string;
+  refreshToken?: string;
+  refresh_token?: string;
+  user?: RefreshPayload;
+};
 
-const drainQueue = (err: unknown, token?: string) => {
-  pendingQueue.forEach((p) => (err ? p.reject(err) : p.resolve(token!)));
-  pendingQueue = [];
+let refreshPromise: Promise<string> | null = null;
+
+const isRejectedRefreshToken = (error: unknown): boolean => {
+  const response = (error as AxiosError<{ statusCode?: string }>).response;
+  return (
+    response?.status === 401 ||
+    response?.data?.statusCode === "AUTH_003" ||
+    response?.data?.statusCode === "TOKEN_100"
+  );
+};
+
+const readBearerToken = (authorization: unknown): string | undefined => {
+  if (typeof authorization !== "string") return undefined;
+  return authorization.replace(/^Bearer\s+/i, "").trim() || undefined;
+};
+
+export const refreshAccessToken = (): Promise<string> => {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = getCookie("refreshToken");
+    if (!refreshToken) throw new Error("no refresh token");
+
+    const response = await axios.post(
+      `${BASE_URL}/auth/refresh`,
+      { refresh_token: refreshToken },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    const envelope = response.data as { data?: RefreshPayload } & RefreshPayload;
+    const payload = envelope.data ?? envelope;
+    const accessToken =
+      payload.accessToken ??
+      payload.access_token ??
+      payload.user?.accessToken ??
+      payload.user?.access_token ??
+      readBearerToken(response.headers.authorization) ??
+      (typeof response.headers["x-access-token"] === "string"
+        ? response.headers["x-access-token"]
+        : undefined);
+    const rotatedRefreshToken =
+      payload.refreshToken ??
+      payload.refresh_token ??
+      payload.user?.refreshToken ??
+      payload.user?.refresh_token ??
+      (typeof response.headers["x-refresh-token"] === "string"
+        ? response.headers["x-refresh-token"]
+        : undefined);
+
+    if (!accessToken) {
+      throw new Error("refresh response did not include an access token");
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("accessToken", accessToken);
+    }
+    if (rotatedRefreshToken) {
+      setCookie("refreshToken", rotatedRefreshToken);
+    }
+
+    return accessToken;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 };
 
 // 토큰 만료 여부 판단
@@ -113,59 +177,34 @@ api.interceptors.response.use(
     }
 
     // 이미 재시도한 요청이면 반환
-    if (original._retry) {
+    if (!original || original._retry) {
       return Promise.reject(error);
     }
 
     // 다른 요청이 이미 갱신 중이면 대기열에 추가
-    if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
-        pendingQueue.push({ resolve, reject });
-      }).then((token) => {
-        original.headers.Authorization = `Bearer ${token}`;
-        return api(original);
-      });
-    }
-
     original._retry = true;
-    isRefreshing = true;
 
     try {
-      const refreshToken = getCookie("refreshToken");
-      if (!refreshToken) throw new Error("no refresh token");
-
-      const { data } = await axios.get(`${BASE_URL}/auth/refresh`, {
-        headers: { Authorization: `Bearer ${refreshToken}` },
-      });
-
-      const newAccess: string = data.data.accessToken;
-      const newRefresh: string = data.data.refreshToken;
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem("accessToken", newAccess);
-      }
-      setCookie("refreshToken", newRefresh);
+      const newAccess = await refreshAccessToken();
 
       // 대기 중이던 요청들 재시도
-      drainQueue(null, newAccess);
+      original.headers = AxiosHeaders.from(original.headers);
 
       // 원래 실패한 요청 재시도
-      original.headers.Authorization = `Bearer ${newAccess}`;
+      original.headers.set("Authorization", `Bearer ${newAccess}`);
       return api(original);
     } catch (err) {
-      drainQueue(err);
       console.error("[Auth] 리프레시 토큰 갱신 실패:", err);
-      // 리프레쉬도 실패 → 토큰 만료 처리
-      toast.error("토큰이 만료되었습니다. 다시 로그인해 주세요.");
-      if (typeof window !== "undefined") {
+      // 네트워크 장애로 사용자를 로그아웃시키지 않고, refresh token이
+      // 실제로 거부된 경우에만 세션을 종료한다.
+      if (isRejectedRefreshToken(err) && typeof window !== "undefined") {
+        toast.error("세션이 만료되었습니다. 다시 로그인해 주세요.");
         localStorage.removeItem("accessToken");
         localStorage.removeItem("auth-storage");
         deleteCookie("refreshToken");
         window.location.href = "/auth/login";
       }
       return Promise.reject(err);
-    } finally {
-      isRefreshing = false;
     }
   }
 );

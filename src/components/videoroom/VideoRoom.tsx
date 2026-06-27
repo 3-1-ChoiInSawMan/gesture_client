@@ -41,7 +41,6 @@ import { saveMeetingNote } from "@/lib/meetingNotes";
 
 interface VideoRoomProps {
   roomId: string;
-  callIdx: number;
   roomTitle?: string;
   isHost?: boolean;
   isPrivate?: boolean;
@@ -63,7 +62,6 @@ function formatMeetingDateTime(date: Date) {
 
 export default function VideoRoom({
   roomId,
-  callIdx,
   roomTitle = "통화방",
   isPrivate = false,
 }: VideoRoomProps) {
@@ -92,6 +90,7 @@ export default function VideoRoom({
   const meetingDateTouchedRef = useRef(false);
   const [isMeetingNoteRecording, setIsMeetingNoteRecording] = useState(false);
   const [isMeetingNoteStarting, setIsMeetingNoteStarting] = useState(false);
+  const activeCallIdxRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -358,6 +357,31 @@ export default function VideoRoom({
     },
     onRoomDeleted: handleRoomDeleted,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveCallIdx = async () => {
+      for (let attempt = 0; attempt < 20 && !cancelled; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        if (cancelled) return;
+        try {
+          const call = await callRoomApi.getCallParticipants(roomId);
+          if (call.callIdx) {
+            activeCallIdxRef.current = call.callIdx;
+            return;
+          }
+        } catch {
+          // 소켓 입장과 서버 통화 정보 생성 사이의 지연 동안 재시도한다.
+        }
+      }
+    };
+
+    void resolveCallIdx();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
 
   useSpeechToText(micStream, (text) => {
     const myName = user?.nickname ?? "Unknown";
@@ -658,11 +682,22 @@ export default function VideoRoom({
     setIsMeetingNoteStarting(true);
 
     try {
-      if (!callIdx) {
+      let resolvedCallIdx = activeCallIdxRef.current;
+      if (!resolvedCallIdx) {
+        for (let attempt = 0; attempt < 6 && !resolvedCallIdx; attempt += 1) {
+          const call = await callRoomApi.getCallParticipants(roomId);
+          resolvedCallIdx = call.callIdx || null;
+          activeCallIdxRef.current = resolvedCallIdx;
+          if (!resolvedCallIdx) {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
+        }
+      }
+      if (!resolvedCallIdx) {
         throw new Error("진행 중인 통화 정보를 찾을 수 없습니다.");
       }
 
-      const minutes = await meetingApi.startMinutes(callIdx);
+      const minutes = await meetingApi.startMinutes(resolvedCallIdx);
       const startedAt = minutes.startedAt ? new Date(minutes.startedAt) : new Date();
       const attendeesText = meetingNotesDraft.attendeesText.trim();
       const attendees = attendeesText
@@ -711,7 +746,6 @@ export default function VideoRoom({
   }, [
     currentRoomTitle,
     connectMeetingSocket,
-    callIdx,
     isMeetingNoteStarting,
     meetingAttendees,
     meetingNotesDraft,

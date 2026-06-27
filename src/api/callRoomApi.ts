@@ -66,15 +66,6 @@ export interface CallParticipantsResponse {
   currentParticipant: number;
 }
 
-export interface JoinCallResponse {
-  callIdx: number;
-  roomIdx: number;
-  userIdx: number;
-  joinedAt: string;
-  currentParticipant: number;
-  maxParticipant: number;
-}
-
 function parseRoomsPage(data: unknown): RoomsPage {
   const body = (data as Record<string, unknown>)?.data ?? data;
   const nested = body as Record<string, unknown>;
@@ -95,23 +86,6 @@ function parseRoomsPage(data: unknown): RoomsPage {
 }
 
 export const callRoomApi = {
-  joinCall: async (
-    roomId: string | number
-  ): Promise<JoinCallResponse> => {
-    const { data } = await api.post(`/calls/${roomId}/join`, {});
-    if (data?.success === false || String(data?.success) === "false") {
-      const message = data?.message ?? "통화 참여에 실패했습니다.";
-      throw Object.assign(new Error(message), {
-        response: {
-          status: message.includes("이미 참여") ? 409 : 400,
-          data,
-        },
-      });
-    }
-    const body = data?.data?.call ?? data?.data ?? data;
-    return body as JoinCallResponse;
-  },
-
   leaveCall: async (roomId: string | number): Promise<void> => {
     await api.delete(`/calls/${roomId}/leave`);
   },

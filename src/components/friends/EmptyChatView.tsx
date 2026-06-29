@@ -24,7 +24,7 @@ export default function EmptyChatView({ onSendMessage }: Props) {
       </div>
       <p className="text-[18px] font-bold text-[#333333]">내 메시지</p>
       <p className="text-[14px] text-[#888888]">
-        친구나 그룹에 사진과 메시지를 보내보세요
+        친구를 선택해 메시지를 보내보세요
       </p>
       <button
         onClick={onSendMessage}

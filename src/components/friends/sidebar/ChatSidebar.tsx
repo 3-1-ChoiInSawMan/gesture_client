@@ -7,11 +7,11 @@ import ChatRoomItem from "./ChatRoomItem";
 
 interface Props {
   onAddFriend: () => void;
-  onCreateRoom: () => void;
+  onNewMessage: () => void;
   onRequests: () => void;
 }
 
-export default function ChatSidebar({ onAddFriend, onCreateRoom, onRequests }: Props) {
+export default function ChatSidebar({ onAddFriend, onNewMessage, onRequests }: Props) {
   const { rooms, selectedRoomId, selectRoom } = useChatStore();
   const [search, setSearch] = useState("");
 
@@ -25,7 +25,7 @@ export default function ChatSidebar({ onAddFriend, onCreateRoom, onRequests }: P
         value={search}
         onChange={setSearch}
         onAddFriend={onAddFriend}
-        onCreateRoom={onCreateRoom}
+        onNewMessage={onNewMessage}
         onRequests={onRequests}
       />
       <div className="flex-1 overflow-y-auto">

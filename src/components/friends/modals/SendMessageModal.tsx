@@ -23,7 +23,7 @@ export default function SendMessageModal({ onClose }: Props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
-  const { createRoom } = useChatStore();
+  const selectRoom = useChatStore((state) => state.selectRoom);
 
   useEffect(() => {
     friendApi.getFriends().then((items) => {
@@ -45,8 +45,7 @@ export default function SendMessageModal({ onClose }: Props) {
     if (!selectedId) return;
     const user = friends.find((u) => u.id === selectedId);
     if (!user) return;
-    createRoom(user.nickname, [selectedId], [user.nickname]);
-    toast.success(`${user.nickname}님과의 채팅방이 생성되었습니다.`);
+    selectRoom(`dm-${selectedId}`);
     onClose();
   };
 

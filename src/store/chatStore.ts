@@ -10,7 +10,6 @@ interface ChatStore {
   addMessage: (roomId: string, message: Message) => void;
   selectRoom: (roomId: string | null) => void;
   sendMessage: (roomId: string, content: string, senderId: string, senderName: string) => void;
-  createRoom: (name: string, memberIds: string[], memberNames?: string[], avatarUrl?: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -52,50 +51,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       rooms: state.rooms.map((r) =>
         r.id === roomId ? { ...r, lastMessage: content, lastMessageTime: `오후 ${time}` } : r
       ),
-    }));
-  },
-
-  createRoom: (name, memberIds, memberNames, avatarUrl) => {
-    const newRoom: ChatRoom = {
-      id: `room-${Date.now()}`,
-      targetUserIdx: memberIds.length === 1 ? Number(memberIds[0]) : undefined,
-      name,
-      isGroup: memberIds.length > 1,
-      members: memberIds.map((id, i) => ({
-        id,
-        nickname: memberNames?.[i] ?? id,
-        username: id,
-      })),
-      lastMessage: "",
-      lastMessageTime: "",
-      avatarUrl,
-    };
-
-    const initMessages: Message[] = [];
-    if (memberIds.length > 1 && memberNames) {
-      const tagContent = memberIds
-        .map((id, i) => `${memberNames[i]}(@${id})`)
-        .join(", ");
-      const now = new Date();
-      const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-      initMessages.push({
-        id: `tag-${Date.now()}`,
-        roomId: newRoom.id,
-        senderId: memberIds[0],
-        senderName: memberNames[0],
-        senderUsername: memberIds[0],
-        content: tagContent,
-        time,
-        date: now.toLocaleDateString("ko-KR", {
-          year: "numeric", month: "long", day: "numeric", weekday: "long",
-        }),
-      });
-    }
-
-    set((state) => ({
-      rooms: [newRoom, ...state.rooms],
-      messages: { ...state.messages, [newRoom.id]: initMessages },
-      selectedRoomId: newRoom.id,
     }));
   },
 }));

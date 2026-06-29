@@ -6,11 +6,11 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   onAddFriend: () => void;
-  onCreateRoom: () => void;
+  onNewMessage: () => void;
   onRequests: () => void;
 }
 
-export default function ChatSearchBar({ value, onChange, onAddFriend, onCreateRoom, onRequests }: Props) {
+export default function ChatSearchBar({ value, onChange, onAddFriend, onNewMessage, onRequests }: Props) {
   return (
     <div className="px-4 py-3 flex items-center gap-2 border-b border-[#EEEEEE]">
       <div className="flex-1 flex items-center gap-2 bg-[#F5F5F5] rounded-[20px] px-3 h-8">
@@ -37,9 +37,9 @@ export default function ChatSearchBar({ value, onChange, onAddFriend, onCreateRo
         <UserPlus size={18} />
       </button>
       <button
-        onClick={onCreateRoom}
+        onClick={onNewMessage}
         className="text-[#888888] hover:text-[#724BFD] transition-colors"
-        title="채팅방 생성"
+        title="새 메시지"
       >
         <MessageSquarePlus size={18} />
       </button>

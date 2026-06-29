@@ -10,18 +10,18 @@ import ChatWindow from "./chat/ChatWindow";
 import EmptyChatView from "./EmptyChatView";
 import AddFriendModal from "./modals/AddFriendModal";
 import SendMessageModal from "./modals/SendMessageModal";
-import CreateChatRoomModal from "./modals/CreateChatRoomModal";
 import FriendRequestsModal from "./modals/FriendRequestsModal";
 import { friendApi } from "@/api/friendApi";
+import { useDmChatSocket } from "./chat/useDmChatSocket";
 
 export default function FriendsPage() {
-  const { selectedRoomId, setRooms } = useChatStore();
+  const { rooms, selectedRoomId, setRooms } = useChatStore();
   const { user, _hasHydrated } = useAuthStore();
   const router = useRouter();
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
+  const sendDm = useDmChatSocket(user ? rooms : []);
 
   const loadFriends = useCallback(async () => {
     const friends = await friendApi.getFriends();
@@ -62,19 +62,18 @@ export default function FriendsPage() {
     <div className="flex h-[calc(100vh-62px)] overflow-hidden">
       <ChatSidebar
         onAddFriend={() => setShowAddFriend(true)}
-        onCreateRoom={() => setShowCreateRoom(true)}
+        onNewMessage={() => setShowSendMessage(true)}
         onRequests={() => setShowRequests(true)}
       />
 
       {selectedRoomId ? (
-        <ChatWindow />
+        <ChatWindow onSendDm={sendDm} />
       ) : (
         <EmptyChatView onSendMessage={() => setShowSendMessage(true)} />
       )}
 
       {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} />}
       {showSendMessage && <SendMessageModal onClose={() => setShowSendMessage(false)} />}
-      {showCreateRoom && <CreateChatRoomModal onClose={() => setShowCreateRoom(false)} />}
       {showRequests && (
         <FriendRequestsModal
           onClose={() => setShowRequests(false)}

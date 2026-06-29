@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ImageIcon, Send } from "lucide-react";
-import { toast } from "react-toastify";
+import { Send } from "lucide-react";
 
 interface Props {
   onSend: (content: string) => void;
@@ -35,12 +34,6 @@ export default function MessageInput({ onSend }: Props) {
           className="flex-1 bg-transparent text-[14px] outline-none text-[#333333] placeholder:text-[#AAAAAA]"
         />
       </div>
-      <button
-        onClick={() => toast.info("이미지 업로드는 준비 중입니다.")}
-        className="text-[#AAAAAA] hover:text-[#724BFD] transition-colors"
-      >
-        <ImageIcon size={20} />
-      </button>
       <button
         onClick={handleSend}
         disabled={!value.trim()}

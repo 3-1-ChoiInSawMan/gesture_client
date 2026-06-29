@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Send, Smile, LayoutGrid, Paperclip, ImageIcon } from "lucide-react";
+import { X, Send } from "lucide-react";
 import { ChatMessage } from "./types";
 
 interface ChatPanelProps {
@@ -97,7 +97,7 @@ export default function ChatPanel({
       </div>
 
       {/* 입력 영역 */}
-      <div className="px-4 py-3 border-t border-[#E6E9EE] flex flex-col gap-3">
+      <div className="px-4 py-3 border-t border-[#E6E9EE]">
         <div className="flex items-center gap-2 border border-[rgba(51,51,51,0.2)] rounded-[12px] px-3 py-2">
           <input
             type="text"
@@ -114,25 +114,6 @@ export default function ChatPanel({
           >
             <Send size={16} />
           </button>
-        </div>
-
-        {/* 하단 아이콘 버튼 */}
-        <div className="flex items-center gap-1">
-          {[
-            { icon: <Smile size={18} />, label: "이모티콘" },
-            { icon: <LayoutGrid size={18} />, label: "슬롯" },
-            { icon: <Paperclip size={18} />, label: "파일업로드" },
-            { icon: <ImageIcon size={18} />, label: "이미지" },
-          ].map(({ icon, label }) => (
-            <button
-              key={label}
-              title={label}
-              className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-[8px] text-[#AAAAAA] hover:text-[#724BFD] hover:bg-[#F5F5F5] transition-colors flex-1"
-            >
-              {icon}
-              <span className="text-[9px]">{label}</span>
-            </button>
-          ))}
         </div>
       </div>
     </div>

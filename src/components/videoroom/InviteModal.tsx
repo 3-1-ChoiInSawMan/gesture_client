@@ -14,8 +14,8 @@ export default function InviteModal({ roomId, onClose }: InviteModalProps) {
   const [search, setSearch] = useState("");
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
-  const [invited, setInvited] = useState<Set<string>>(new Set());
-  const [inviting, setInviting] = useState<Set<string>>(new Set());
+  const [invited, setInvited] = useState<Set<number>>(new Set());
+  const [inviting, setInviting] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -39,18 +39,21 @@ export default function InviteModal({ roomId, onClose }: InviteModalProps) {
   );
 
   const handleInvite = async (friend: Friend) => {
-    if (invited.has(friend.userId) || inviting.has(friend.userId)) return;
-    setInviting((prev) => new Set(prev).add(friend.userId));
+    if (invited.has(friend.idx) || inviting.has(friend.idx)) return;
+    setInviting((prev) => new Set(prev).add(friend.idx));
     try {
-      await friendApi.inviteFriend(friend.userId, roomId);
-      setInvited((prev) => new Set(prev).add(friend.userId));
+      await friendApi.inviteFriend(friend.idx, Number(roomId));
+      setInvited((prev) => new Set(prev).add(friend.idx));
       toast.success(`${friend.nickname}님을 초대했습니다.`);
-    } catch {
-      toast.error("초대에 실패했습니다.");
+    } catch (error) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "초대에 실패했습니다.";
+      toast.error(message);
     } finally {
       setInviting((prev) => {
         const next = new Set(prev);
-        next.delete(friend.userId);
+        next.delete(friend.idx);
         return next;
       });
     }
@@ -104,8 +107,8 @@ export default function InviteModal({ roomId, onClose }: InviteModalProps) {
               </p>
             ) : (
               filtered.map((friend) => {
-                const isInvited = invited.has(friend.userId);
-                const isInviting = inviting.has(friend.userId);
+                const isInvited = invited.has(friend.idx);
+                const isInviting = inviting.has(friend.idx);
                 return (
                   <div
                     key={friend.userId}

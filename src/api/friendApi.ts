@@ -134,9 +134,9 @@ export const friendApi = {
   },
 
   inviteFriend: async (
-    targetUserId: string,
-    targetCallRoom: string
+    targetUserIdx: number,
+    targetRoomIdx: number
   ): Promise<void> => {
-    await api.post("/friend/invite", { targetUserId, targetCallRoom });
+    await api.post("/friend/invite", { targetUserIdx, targetRoomIdx });
   },
 };

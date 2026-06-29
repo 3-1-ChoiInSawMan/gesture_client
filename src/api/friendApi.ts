@@ -24,10 +24,17 @@ const normalizeFriends = (value: unknown): Friend[] => {
   return value
     .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .map((item) => ({
-      idx: Number(item.friendIdx ?? item.userIdx ?? item.idx ?? 0),
-      id: String(item.friendId ?? item.userId ?? item.id ?? ""),
-      userId: String(item.friendId ?? item.userId ?? item.id ?? ""),
-      nickname: String(item.friendNickname ?? item.nickname ?? item.friendId ?? ""),
+      idx: Number(item.friendIdx ?? item.friend_idx ?? item.userIdx ?? item.idx ?? 0),
+      id: String(item.friendId ?? item.friend_id ?? item.userId ?? item.id ?? ""),
+      userId: String(item.friendId ?? item.friend_id ?? item.userId ?? item.id ?? ""),
+      nickname: String(
+        item.friendNickname ??
+          item.friend_nickname ??
+          item.nickname ??
+          item.friendId ??
+          item.friend_id ??
+          ""
+      ),
       profileImage: String(item.profileUrl ?? item.profileImage ?? "") || undefined,
       statusMessage: String(item.statusMessage ?? "") || undefined,
     }))
@@ -44,16 +51,50 @@ const normalizeRequests = (value: unknown): FriendRequest[] => {
     .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .map((item) => {
       const friendshipIdx = Number(
-        item.friendshipIdx ?? item.requestId ?? item.friendship_id ?? item.idx ?? 0
+        item.friendshipIdx ??
+          item.friendRequestIdx ??
+          item.friend_request_idx ??
+          item.requestId ??
+          item.friendship_id ??
+          item.idx ??
+          0
       );
       return {
         friendshipIdx,
         requestId: friendshipIdx,
-        userIdx: Number(item.userIdx ?? item.fromUserIdx ?? item.senderIdx ?? 0),
-        username: String(item.userId ?? item.username ?? item.senderId ?? ""),
-        userId: String(item.userId ?? item.username ?? item.senderId ?? ""),
-        nickname: String(item.nickname ?? item.senderNickname ?? item.userId ?? ""),
-        sentAt: String(item.sentAt ?? item.createdAt ?? ""),
+        userIdx: Number(
+          item.requesterIdx ??
+            item.requester_idx ??
+            item.userIdx ??
+            item.fromUserIdx ??
+            item.senderIdx ??
+            0
+        ),
+        username: String(
+          item.requesterId ??
+            item.requester_id ??
+            item.userId ??
+            item.username ??
+            item.senderId ??
+            ""
+        ),
+        userId: String(
+          item.requesterId ??
+            item.requester_id ??
+            item.userId ??
+            item.username ??
+            item.senderId ??
+            ""
+        ),
+        nickname: String(
+          item.requesterNickname ??
+            item.requester_nickname ??
+            item.nickname ??
+            item.senderNickname ??
+            item.userId ??
+            ""
+        ),
+        sentAt: String(item.sentAt ?? item.createdAt ?? item.created_at ?? ""),
       };
     })
     .filter((request) => request.friendshipIdx > 0);

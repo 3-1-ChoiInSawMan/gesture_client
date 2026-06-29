@@ -44,7 +44,10 @@ export default function ChatPanel({
     .padStart(2, "0")} ${now.getHours() < 12 ? "AM" : "PM"}`;
 
   return (
-    <div className="w-[340px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
+    <div
+      className="relative z-50 w-[340px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full"
+      onMouseMove={(event) => event.stopPropagation()}
+    >
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E6E9EE]">
         <div className="flex flex-col min-w-0">

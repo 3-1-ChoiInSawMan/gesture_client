@@ -10,44 +10,112 @@ import ChatWindow from "./chat/ChatWindow";
 import EmptyChatView from "./EmptyChatView";
 import AddFriendModal from "./modals/AddFriendModal";
 import SendMessageModal from "./modals/SendMessageModal";
+import CreateChatRoomModal from "./modals/CreateChatRoomModal";
 import FriendRequestsModal from "./modals/FriendRequestsModal";
-import { friendApi } from "@/api/friendApi";
-import { useDmChatSocket } from "./chat/useDmChatSocket";
+import { chatRoomApi, ChatRoomSummary } from "@/api/chatRoomApi";
+import { ChatRoom } from "./types";
+
+const formatMessageTime = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+async function loadChatRoom(
+  summary: ChatRoomSummary,
+  currentUserId: string
+): Promise<ChatRoom> {
+  const [detail, latest] = await Promise.all([
+    chatRoomApi.getRoom(summary.chatRoomIdx),
+    chatRoomApi.getMessages(summary.chatRoomIdx, { size: 1 }),
+  ]);
+  const otherParticipants = detail.participants.filter(
+    (participant) => participant.userId !== currentUserId
+  );
+  const directTarget =
+    detail.participants.length === 2 && otherParticipants.length === 1
+      ? otherParticipants[0]
+      : undefined;
+  const latestMessage = latest.messages[0];
+
+  return {
+    id: `chat-${summary.chatRoomIdx}`,
+    chatRoomIdx: summary.chatRoomIdx,
+    targetUserIdx: directTarget?.userIdx,
+    name: summary.name,
+    isGroup: summary.participantCount > 2,
+    members: detail.participants.map((participant) => ({
+      id: String(participant.userIdx),
+      nickname: participant.nickname,
+      username: participant.userId,
+      profileImage: participant.profileImageUrl ?? undefined,
+    })),
+    lastMessage:
+      latestMessage?.type === "FILE"
+        ? "파일"
+        : latestMessage?.message ?? "",
+    lastMessageTime: formatMessageTime(latestMessage?.createdAt),
+    avatarUrl: summary.imageUrl ?? directTarget?.profileImageUrl ?? undefined,
+  };
+}
 
 export default function FriendsPage() {
-  const { rooms, selectedRoomId, setRooms } = useChatStore();
+  const { selectedRoomId, setRooms } = useChatStore();
   const { user, _hasHydrated } = useAuthStore();
   const router = useRouter();
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
-  const sendDm = useDmChatSocket(user ? rooms : []);
 
-  const loadFriends = useCallback(async () => {
-    const friends = await friendApi.getFriends();
-    setRooms(
-      friends.map((friend) => ({
-        id: `dm-${friend.idx}`,
-        targetUserIdx: friend.idx,
-        name: friend.nickname,
-        isGroup: false,
-        members: [{
-          id: friend.id,
-          nickname: friend.nickname,
-          username: friend.id,
-          profileImage: friend.profileImage,
-        }],
-        lastMessage: "",
-        lastMessageTime: "",
-        avatarUrl: friend.profileImage,
-      }))
+  const loadChatRooms = useCallback(async () => {
+    if (!user) return;
+    const summaries = await chatRoomApi.getRooms();
+    const results = await Promise.allSettled(
+      summaries.map((summary) => loadChatRoom(summary, user.id))
     );
-  }, [setRooms]);
+    setRooms(
+      results
+        .filter(
+          (result): result is PromiseFulfilledResult<ChatRoom> =>
+            result.status === "fulfilled"
+        )
+        .map((result) => result.value)
+    );
+  }, [setRooms, user]);
 
   useEffect(() => {
     if (!_hasHydrated || !user) return;
-    void loadFriends().catch(() => toast.error("친구 목록을 불러오지 못했습니다."));
-  }, [_hasHydrated, user, loadFriends]);
+    let disposed = false;
+    let loading = false;
+    let firstRun = true;
+
+    const run = async () => {
+      if (disposed || loading) return;
+      loading = true;
+      try {
+        await loadChatRooms();
+      } catch {
+        if (!disposed && firstRun) {
+          toast.error("채팅방 목록을 불러오지 못했습니다.");
+        }
+      } finally {
+        firstRun = false;
+        loading = false;
+      }
+    };
+
+    void run();
+    const timer = window.setInterval(run, 10000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [_hasHydrated, user, loadChatRooms]);
 
   useEffect(() => {
     if (_hasHydrated && !user) {
@@ -63,21 +131,33 @@ export default function FriendsPage() {
       <ChatSidebar
         onAddFriend={() => setShowAddFriend(true)}
         onNewMessage={() => setShowSendMessage(true)}
+        onCreateRoom={() => setShowCreateRoom(true)}
         onRequests={() => setShowRequests(true)}
       />
 
       {selectedRoomId ? (
-        <ChatWindow onSendDm={sendDm} />
+        <ChatWindow />
       ) : (
         <EmptyChatView onSendMessage={() => setShowSendMessage(true)} />
       )}
 
       {showAddFriend && <AddFriendModal onClose={() => setShowAddFriend(false)} />}
-      {showSendMessage && <SendMessageModal onClose={() => setShowSendMessage(false)} />}
+      {showSendMessage && (
+        <SendMessageModal
+          onClose={() => setShowSendMessage(false)}
+          onCreated={loadChatRooms}
+        />
+      )}
+      {showCreateRoom && (
+        <CreateChatRoomModal
+          onClose={() => setShowCreateRoom(false)}
+          onCreated={loadChatRooms}
+        />
+      )}
       {showRequests && (
         <FriendRequestsModal
           onClose={() => setShowRequests(false)}
-          onChanged={() => void loadFriends()}
+          onChanged={() => undefined}
         />
       )}
     </div>

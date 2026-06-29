@@ -1,16 +1,24 @@
 "use client";
 
-import { Search, UserPlus, MessageSquarePlus, UsersRound } from "lucide-react";
+import { Search, UserPlus, MessageSquarePlus, MessagesSquare, UsersRound } from "lucide-react";
 
 interface Props {
   value: string;
   onChange: (v: string) => void;
   onAddFriend: () => void;
   onNewMessage: () => void;
+  onCreateRoom: () => void;
   onRequests: () => void;
 }
 
-export default function ChatSearchBar({ value, onChange, onAddFriend, onNewMessage, onRequests }: Props) {
+export default function ChatSearchBar({
+  value,
+  onChange,
+  onAddFriend,
+  onNewMessage,
+  onCreateRoom,
+  onRequests,
+}: Props) {
   return (
     <div className="px-4 py-3 flex items-center gap-2 border-b border-[#EEEEEE]">
       <div className="flex-1 flex items-center gap-2 bg-[#F5F5F5] rounded-[20px] px-3 h-8">
@@ -42,6 +50,13 @@ export default function ChatSearchBar({ value, onChange, onAddFriend, onNewMessa
         title="새 메시지"
       >
         <MessageSquarePlus size={18} />
+      </button>
+      <button
+        onClick={onCreateRoom}
+        className="text-[#888888] hover:text-[#724BFD] transition-colors"
+        title="그룹 채팅방 만들기"
+      >
+        <MessagesSquare size={18} />
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { Message } from "../types";
+import { Paperclip } from "lucide-react";
 
 interface Props {
   message: Message;
@@ -9,6 +10,20 @@ interface Props {
 
 export default function MessageItem({ message, isMe }: Props) {
   const isMention = message.content.startsWith("@");
+  const content =
+    message.type === "FILE" && message.fileUrl ? (
+      <a
+        href={message.fileUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-2 underline underline-offset-2"
+      >
+        <Paperclip size={15} />
+        파일 열기
+      </a>
+    ) : (
+      message.content
+    );
 
   if (isMe) {
     return (
@@ -27,7 +42,7 @@ export default function MessageItem({ message, isMe }: Props) {
                 : "bg-[#724BFD] text-white"
             }`}
           >
-            {message.content}
+            {content}
           </div>
         </div>
       </div>
@@ -49,7 +64,7 @@ export default function MessageItem({ message, isMe }: Props) {
                 : "bg-[#F0F0F0] text-[#333333]"
             }`}
           >
-            {message.content}
+            {content}
           </div>
           <span className="text-[10px] text-[#AAAAAA] shrink-0">{message.time}</span>
         </div>

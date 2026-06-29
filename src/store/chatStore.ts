@@ -7,50 +7,58 @@ interface ChatStore {
   selectedRoomId: string | null;
 
   setRooms: (rooms: ChatRoom[]) => void;
+  setMessages: (roomId: string, messages: Message[]) => void;
+  mergeMessages: (roomId: string, messages: Message[]) => void;
   addMessage: (roomId: string, message: Message) => void;
   selectRoom: (roomId: string | null) => void;
-  sendMessage: (roomId: string, content: string, senderId: string, senderName: string) => void;
 }
 
-export const useChatStore = create<ChatStore>((set, get) => ({
+const updateRoomPreview = (rooms: ChatRoom[], roomId: string, messages: Message[]) => {
+  const latest = messages[messages.length - 1];
+  if (!latest) return rooms;
+  return rooms.map((room) =>
+    room.id === roomId
+      ? {
+          ...room,
+          lastMessage: latest.type === "FILE" ? "파일" : latest.content,
+          lastMessageTime: latest.time,
+        }
+      : room
+  );
+};
+
+const mergeById = (current: Message[], incoming: Message[]) => {
+  const merged = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => merged.set(message.id, message));
+  return [...merged.values()].sort((a, b) => Number(a.id) - Number(b.id));
+};
+
+export const useChatStore = create<ChatStore>((set) => ({
   rooms: [],
   messages: {},
   selectedRoomId: null,
 
   setRooms: (rooms) => set({ rooms }),
-  addMessage: (roomId, message) =>
+  setMessages: (roomId, messages) =>
     set((state) => ({
-      messages: {
-        ...state.messages,
-        [roomId]: [...(state.messages[roomId] ?? []), message],
-      },
-      rooms: state.rooms.map((room) =>
-        room.id === roomId
-          ? { ...room, lastMessage: message.content, lastMessageTime: message.time }
-          : room
-      ),
+      messages: { ...state.messages, [roomId]: messages },
+      rooms: updateRoomPreview(state.rooms, roomId, messages),
     })),
+  mergeMessages: (roomId, messages) =>
+    set((state) => {
+      const merged = mergeById(state.messages[roomId] ?? [], messages);
+      return {
+        messages: { ...state.messages, [roomId]: merged },
+        rooms: updateRoomPreview(state.rooms, roomId, merged),
+      };
+    }),
+  addMessage: (roomId, message) =>
+    set((state) => {
+      const merged = mergeById(state.messages[roomId] ?? [], [message]);
+      return {
+        messages: { ...state.messages, [roomId]: merged },
+        rooms: updateRoomPreview(state.rooms, roomId, merged),
+      };
+    }),
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
-
-  sendMessage: (roomId, content, senderId, senderName) => {
-    const now = new Date();
-    const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-    const newMsg: Message = {
-      id: Date.now().toString(),
-      roomId,
-      senderId,
-      senderName,
-      senderUsername: senderId,
-      content,
-      time,
-      date: now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" }),
-    };
-    const prev = get().messages[roomId] ?? [];
-    set((state) => ({
-      messages: { ...state.messages, [roomId]: [...prev, newMsg] },
-      rooms: state.rooms.map((r) =>
-        r.id === roomId ? { ...r, lastMessage: content, lastMessageTime: `오후 ${time}` } : r
-      ),
-    }));
-  },
 }));

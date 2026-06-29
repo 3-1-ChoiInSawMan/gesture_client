@@ -4,17 +4,21 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { FriendUser } from "../types";
 import { useChatStore } from "@/store/chatStore";
+import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
 import { friendApi } from "@/api/friendApi";
+import { chatRoomApi } from "@/api/chatRoomApi";
 
 interface Props {
   onClose: () => void;
+  onCreated: () => Promise<void>;
 }
 
-export default function SendMessageModal({ onClose }: Props) {
+export default function SendMessageModal({ onClose, onCreated }: Props) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -23,7 +27,8 @@ export default function SendMessageModal({ onClose }: Props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
-  const selectRoom = useChatStore((state) => state.selectRoom);
+  const { rooms, selectRoom } = useChatStore();
+  const currentUser = useAuthStore((state) => state.user);
 
   useEffect(() => {
     friendApi.getFriends().then((items) => {
@@ -41,12 +46,35 @@ export default function SendMessageModal({ onClose }: Props) {
     ? friends.filter((u) => u.username.toLowerCase().includes(query.toLowerCase()))
     : [];
 
-  const handleChat = () => {
-    if (!selectedId) return;
-    const user = friends.find((u) => u.id === selectedId);
-    if (!user) return;
-    selectRoom(`dm-${selectedId}`);
-    onClose();
+  const handleChat = async () => {
+    if (!selectedId || creating) return;
+    const selectedUser = friends.find((friend) => friend.id === selectedId);
+    if (!selectedUser) return;
+
+    const existingRoom = rooms.find(
+      (room) => !room.isGroup && room.targetUserIdx === Number(selectedId)
+    );
+    if (existingRoom) {
+      selectRoom(existingRoom.id);
+      onClose();
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const room = await chatRoomApi.create({
+        name: `${currentUser?.nickname ?? "나"}, ${selectedUser.nickname}`,
+        participantIds: [Number(selectedId)],
+      });
+      await onCreated();
+      selectRoom(`chat-${room.chatRoomIdx}`);
+      toast.success("채팅방 초대를 보냈습니다.");
+      onClose();
+    } catch {
+      toast.error("채팅방을 만들지 못했습니다.");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -100,10 +128,10 @@ export default function SendMessageModal({ onClose }: Props) {
           <div className="px-6 py-4">
             <button
               onClick={handleChat}
-              disabled={!selectedId}
+              disabled={!selectedId || creating}
               className="w-full h-[44px] bg-[#724BFD] text-white text-[14px] font-semibold rounded-[10px] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#5f3de0] transition-colors"
             >
-              채팅
+              {creating ? "만드는 중..." : "채팅"}
             </button>
           </div>
         </div>

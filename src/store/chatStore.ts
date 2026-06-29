@@ -7,44 +7,22 @@ interface ChatStore {
   selectedRoomId: string | null;
 
   setRooms: (rooms: ChatRoom[]) => void;
-  setMessages: (roomId: string, messages: Message[]) => void;
   addMessage: (roomId: string, message: Message) => void;
   selectRoom: (roomId: string | null) => void;
+  sendMessage: (roomId: string, content: string, senderId: string, senderName: string) => void;
 }
 
-export const useChatStore = create<ChatStore>((set) => ({
+export const useChatStore = create<ChatStore>((set, get) => ({
   rooms: [],
   messages: {},
   selectedRoomId: null,
 
   setRooms: (rooms) => set({ rooms }),
-  setMessages: (roomId, messages) =>
-    set((state) => {
-      const latest = messages[messages.length - 1];
-      return {
-        messages: { ...state.messages, [roomId]: messages },
-        rooms: latest
-          ? state.rooms.map((room) =>
-              room.id === roomId
-                ? {
-                    ...room,
-                    lastMessage: latest.content,
-                    lastMessageTime: latest.time,
-                  }
-                : room
-            )
-          : state.rooms,
-      };
-    }),
   addMessage: (roomId, message) =>
     set((state) => ({
       messages: {
         ...state.messages,
-        [roomId]: (state.messages[roomId] ?? []).some(
-          (item) => item.id === message.id
-        )
-          ? state.messages[roomId]
-          : [...(state.messages[roomId] ?? []), message],
+        [roomId]: [...(state.messages[roomId] ?? []), message],
       },
       rooms: state.rooms.map((room) =>
         room.id === roomId
@@ -53,4 +31,26 @@ export const useChatStore = create<ChatStore>((set) => ({
       ),
     })),
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
+
+  sendMessage: (roomId, content, senderId, senderName) => {
+    const now = new Date();
+    const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const newMsg: Message = {
+      id: Date.now().toString(),
+      roomId,
+      senderId,
+      senderName,
+      senderUsername: senderId,
+      content,
+      time,
+      date: now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" }),
+    };
+    const prev = get().messages[roomId] ?? [];
+    set((state) => ({
+      messages: { ...state.messages, [roomId]: [...prev, newMsg] },
+      rooms: state.rooms.map((r) =>
+        r.id === roomId ? { ...r, lastMessage: content, lastMessageTime: `오후 ${time}` } : r
+      ),
+    }));
+  },
 }));

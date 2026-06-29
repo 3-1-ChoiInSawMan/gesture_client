@@ -4,28 +4,22 @@ import { useState } from "react";
 import { Send } from "lucide-react";
 
 interface Props {
-  onSend: (content: string) => Promise<boolean>;
+  onSend: (content: string) => void;
 }
 
 export default function MessageInput({ onSend }: Props) {
   const [value, setValue] = useState("");
-  const [sending, setSending] = useState(false);
 
-  const handleSend = async () => {
-    const content = value.trim();
-    if (!content || sending) return;
-    setSending(true);
-    try {
-      if (await onSend(content)) setValue("");
-    } finally {
-      setSending(false);
-    }
+  const handleSend = () => {
+    if (!value.trim()) return;
+    onSend(value.trim());
+    setValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void handleSend();
+      handleSend();
     }
   };
 
@@ -41,8 +35,8 @@ export default function MessageInput({ onSend }: Props) {
         />
       </div>
       <button
-        onClick={() => void handleSend()}
-        disabled={!value.trim() || sending}
+        onClick={handleSend}
+        disabled={!value.trim()}
         className="text-[#724BFD] disabled:text-[#CCCCCC] transition-colors"
       >
         <Send size={20} />

@@ -1,0 +1,178 @@
+import { ChatRoom, Message, FriendUser } from "./types";
+
+export const MOCK_MEMBERS = {
+  me: { id: "me", nickname: "김하온", username: "noahmik", profileImage: undefined },
+  sik: { id: "sik", nickname: "권민식", username: "sik_k", profileImage: undefined },
+  young: { id: "young", nickname: "임영용", username: "now_im_young", profileImage: undefined },
+  jmin: { id: "jmin", nickname: "제이민", username: "jmin", profileImage: undefined },
+  vang: { id: "vang", nickname: "방진우", username: "vangdale", profileImage: undefined },
+  swim: { id: "swim", nickname: "권수영", username: "swim", profileImage: undefined },
+};
+
+export const MOCK_ROOMS: ChatRoom[] = [
+  {
+    id: "room-kc",
+    name: "kc방",
+    isGroup: true,
+    members: [
+      MOCK_MEMBERS.me,
+      MOCK_MEMBERS.sik,
+      MOCK_MEMBERS.young,
+      MOCK_MEMBERS.jmin,
+      MOCK_MEMBERS.vang,
+      MOCK_MEMBERS.swim,
+    ],
+    lastMessage: "kc에서 나가",
+    lastMessageTime: "오후 2:30",
+    avatarUrl: undefined,
+  },
+  {
+    id: "room-haon",
+    name: "김하온",
+    isGroup: false,
+    members: [MOCK_MEMBERS.me, MOCK_MEMBERS.young],
+    lastMessage: "얼굴엔 철판 깔아 빨아먹고 입 싹...",
+    lastMessageTime: "오후 2:30",
+  },
+  {
+    id: "room-3",
+    name: "김하온",
+    isGroup: false,
+    members: [MOCK_MEMBERS.me, MOCK_MEMBERS.sik],
+    lastMessage: "kc에서 나가",
+    lastMessageTime: "오후 2:30",
+  },
+  {
+    id: "room-4",
+    name: "김하온",
+    isGroup: false,
+    members: [MOCK_MEMBERS.me, MOCK_MEMBERS.jmin],
+    lastMessage: "kc에서 나가",
+    lastMessageTime: "오후 2:30",
+  },
+  {
+    id: "room-5",
+    name: "김하온",
+    isGroup: false,
+    members: [MOCK_MEMBERS.me, MOCK_MEMBERS.vang],
+    lastMessage: "kc에서 나가",
+    lastMessageTime: "오후 2:30",
+  },
+  {
+    id: "room-6",
+    name: "김하온",
+    isGroup: false,
+    members: [MOCK_MEMBERS.me, MOCK_MEMBERS.swim],
+    lastMessage: "kc에서 나가",
+    lastMessageTime: "오후 2:30",
+  },
+];
+
+export const MOCK_MESSAGES: Record<string, Message[]> = {
+  "room-kc": [
+    {
+      id: "m0",
+      roomId: "room-kc",
+      senderId: "inky",
+      senderName: "최인규",
+      senderUsername: "inky",
+      content:
+        "권민식(@sik_k), 임영용(@now_im_young), 김하온(@noahmik), 제이민(@jmin),  방진우(@vangdale)\n권수영(@swim)",
+      time: "14:00",
+      date: "2026년 03월 13일 금요일",
+    },
+    {
+      id: "m1",
+      roomId: "room-kc",
+      senderId: "young",
+      senderName: "김하온",
+      senderUsername: "noahmik",
+      content: "5년 전 선물 받은 방석 위에서\n나 방금 명상했어",
+      time: "13:56",
+      date: "2026년 03월 13일 금요일",
+    },
+    {
+      id: "m2",
+      roomId: "room-kc",
+      senderId: "young",
+      senderName: "김하온",
+      senderUsername: "noahmik",
+      content: "@swim",
+      time: "13:56",
+      date: "2026년 03월 13일 금요일",
+    },
+    {
+      id: "m3",
+      roomId: "room-kc",
+      senderId: "me",
+      senderName: "나",
+      senderUsername: "noahmik",
+      content: "kc에서 나가",
+      time: "14:30",
+      date: "2026년 03월 13일 금요일",
+    },
+    {
+      id: "m4",
+      roomId: "room-kc",
+      senderId: "me",
+      senderName: "나",
+      senderUsername: "noahmik",
+      content: "@sik_k",
+      time: "14:31",
+      date: "2026년 03월 13일 금요일",
+    },
+  ],
+  "room-haon": [
+    {
+      id: "h1",
+      roomId: "room-haon",
+      senderId: "young",
+      senderName: "김하온",
+      senderUsername: "now_im_young",
+      content: "5년 전 선물 받은 방석 위에서\n나 방금 명상했어",
+      time: "13:56",
+      date: "2026년 03월 13일 금요일",
+    },
+    {
+      id: "h2",
+      roomId: "room-haon",
+      senderId: "me",
+      senderName: "나",
+      senderUsername: "noahmik",
+      content: "얼굴엔 철판 깔아 빨아먹고 입 싹 닦아",
+      time: "14:30",
+      date: "2026년 03월 13일 금요일",
+      replyToName: "김하온",
+    },
+    {
+      id: "h3",
+      roomId: "room-haon",
+      senderId: "me",
+      senderName: "나",
+      senderUsername: "noahmik",
+      content: "명상은 무슨 명상이니 발 닦고 잠이나 자라",
+      time: "14:30",
+      date: "2026년 03월 13일 금요일",
+    },
+  ],
+};
+
+export const MOCK_FRIENDS: FriendUser[] = [
+  { id: "vang1", nickname: "방진우", username: "vangdale", status: "sent" },
+  { id: "vang2", nickname: "방진우", username: "vangdale2", status: "none" },
+  { id: "vang3", nickname: "방진우", username: "vangdale3", status: "friend" },
+  { id: "vang4", nickname: "방진우", username: "vangdale4", status: "sent" },
+  { id: "vang5", nickname: "방진우", username: "vangdale5", status: "sent" },
+];
+
+export const ALL_USERS: FriendUser[] = [
+  { id: "sik", nickname: "권민식", username: "sik_k", status: "friend" },
+  { id: "young", nickname: "임영용", username: "now_im_young", status: "friend" },
+  { id: "jmin", nickname: "제이민", username: "jmin", status: "friend" },
+  { id: "vang1", nickname: "방진우", username: "vangdale", status: "sent" },
+  { id: "vang2", nickname: "방진우", username: "vangdale2", status: "none" },
+  { id: "vang3", nickname: "방진우", username: "vangdale3", status: "friend" },
+  { id: "vang4", nickname: "방진우", username: "vangdale4", status: "sent" },
+  { id: "vang5", nickname: "방진우", username: "vangdale5", status: "sent" },
+  { id: "swim", nickname: "권수영", username: "swim", status: "friend" },
+];

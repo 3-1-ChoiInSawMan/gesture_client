@@ -7,6 +7,7 @@ export interface ChatMember {
 
 export interface ChatRoom {
   id: string;
+  chatRoomIdx: number;
   targetUserIdx?: number;
   name: string;
   isGroup: boolean;

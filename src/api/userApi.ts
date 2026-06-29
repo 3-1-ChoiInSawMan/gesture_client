@@ -11,6 +11,7 @@ export interface UserProfile {
   profileUrl?: string;
   statusMessage?: string;
   joinedAt: string;
+  createdAt?: string;
   stats?: {
     totalCalls: number;
     friends: number;
@@ -40,10 +41,15 @@ export const userApi = {
     } as UserProfile;
   },
 
-  getUser: async (userId: string): Promise<UserProfile> => {
-    const { data } = await api.get(`/users/${userId}`);
+  getUser: async (userIdx: string | number): Promise<UserProfile> => {
+    const { data } = await api.get(`/users/${userIdx}`);
     const body = data?.data?.user ?? data?.user ?? data?.data ?? data;
-    return body as UserProfile;
+    return {
+      ...body,
+      userId: body.userId ?? body.id ?? "",
+      profileImage: body.profileUrl ?? body.profileImage,
+      joinedAt: body.joinedAt ?? body.createdAt ?? "",
+    } as UserProfile;
   },
 
   searchUser: async (userId: string): Promise<UserProfile[]> => {

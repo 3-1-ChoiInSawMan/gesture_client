@@ -58,15 +58,15 @@ export const meetingApi = {
   },
 
   endMinutes: async (minutesIdx: string | number): Promise<MeetingMinutes> => {
-    const { data } = await api.get(`/meetings/${minutesIdx}/end`);
+    const { data } = await api.post(`/meetings/${minutesIdx}/end`);
     return unwrap<MeetingMinutes>(data);
   },
 
   createMinutes: async (
-    callIdx: string | number,
+    roomIdx: string | number,
     body: CreateMinutesRequest
   ): Promise<MeetingMinutes> => {
-    const { data } = await api.post(`/meetings/calls/${callIdx}`, body);
+    const { data } = await api.post(`/meetings/rooms/${roomIdx}`, body);
     return unwrap<MeetingMinutes>(data);
   },
 

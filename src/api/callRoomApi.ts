@@ -66,6 +66,15 @@ export interface CallParticipantsResponse {
   currentParticipant: number;
 }
 
+function getStatusCode(error: unknown): string {
+  return String(
+    (error as { response?: { data?: { statusCode?: string; code?: string } } })
+      ?.response?.data?.statusCode ??
+      (error as { response?: { data?: { code?: string } } })?.response?.data?.code ??
+      ""
+  );
+}
+
 function parseRoomsPage(data: unknown): RoomsPage {
   const body = (data as Record<string, unknown>)?.data ?? data;
   const nested = body as Record<string, unknown>;
@@ -86,6 +95,16 @@ function parseRoomsPage(data: unknown): RoomsPage {
 }
 
 export const callRoomApi = {
+  joinCall: async (roomId: string | number): Promise<void> => {
+    try {
+      await api.post(`/calls/${roomId}/join`);
+    } catch (error) {
+      // React Strict Mode 재실행이나 새로고침으로 이미 참여 중이면 세션은 준비된 상태다.
+      if (getStatusCode(error) === "CALL_004") return;
+      throw error;
+    }
+  },
+
   leaveCall: async (roomId: string | number): Promise<void> => {
     await api.delete(`/calls/${roomId}/leave`);
   },

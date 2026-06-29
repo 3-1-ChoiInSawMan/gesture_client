@@ -77,19 +77,19 @@ export const friendApi = {
   },
 
   sendRequest: async (userIdx: number): Promise<void> => {
-    await api.post("/friend", null, { params: { userIdx } });
+    await api.post("/friend", undefined, { params: { userIdx } });
   },
 
   acceptRequest: async (friendshipIdx: string | number): Promise<void> => {
-    await api.post("/friend/accept", null, { params: { friendshipIdx } });
+    await api.post("/friend/accept", undefined, { params: { friendshipIdx } });
   },
 
   denyRequest: async (friendshipIdx: string | number): Promise<void> => {
-    await api.post("/friend/reject", null, { params: { friendshipIdx } });
+    await api.post("/friend/reject", undefined, { params: { friendshipIdx } });
   },
 
-  deleteFriend: async (userId: string): Promise<void> => {
-    await api.delete("/friend", { params: { userId } });
+  deleteFriend: async (userIdx: string | number): Promise<void> => {
+    await api.delete("/friend", { params: { userIdx } });
   },
 
   inviteFriend: async (

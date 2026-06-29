@@ -38,7 +38,7 @@ export default function ParticipantsPanel({
   };
 
   return (
-    <div className="w-[280px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full relative">
+    <div className="relative z-[60] w-[280px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E6E9EE]">
         <span className="text-[14px] font-semibold text-[#333]">참여자 목록</span>

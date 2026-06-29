@@ -26,7 +26,7 @@ export default function MeetingNotesPanel({
   onClose,
 }: MeetingNotesPanelProps) {
   return (
-    <aside className="w-[320px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
+    <aside className="relative z-[60] w-[320px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E6E9EE]">
         <span className="text-[14px] font-semibold text-[#333333]">회의록</span>
         <button
@@ -42,7 +42,7 @@ export default function MeetingNotesPanel({
         <button
           onClick={onStart}
           disabled={isRecording || isStarting}
-          className={`h-10 rounded-[8px] text-[13px] font-semibold transition-colors ${
+          className={`h-11 min-h-11 shrink-0 rounded-[8px] text-[13px] font-semibold transition-colors ${
             isRecording
               ? "bg-[#E8E2FF] text-[#724BFD] cursor-default"
               : "bg-[#724BFD] text-white hover:bg-[#5f3de0]"

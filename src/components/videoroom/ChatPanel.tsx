@@ -45,7 +45,7 @@ export default function ChatPanel({
 
   return (
     <div
-      className="relative z-50 w-[340px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full"
+      className="relative z-[60] w-[340px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full"
       onMouseMove={(event) => event.stopPropagation()}
     >
       {/* 헤더 */}

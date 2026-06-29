@@ -60,7 +60,7 @@ export default function QuickSlotPanel({ onClose }: QuickSlotPanelProps) {
   }, []);
 
   return (
-    <aside className="w-[320px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
+    <aside className="relative z-[60] w-[320px] shrink-0 flex flex-col bg-white border-l border-[#E6E9EE] h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#E6E9EE]">
         <div className="flex items-center gap-2">
           <Zap size={16} className="text-[#724BFD]" />

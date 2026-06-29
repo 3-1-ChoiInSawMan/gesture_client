@@ -140,9 +140,8 @@ export function useWebRTC(params: {
   onSpeechCaption?: (name: string, text: string) => void;
   onTranslation?: (text: string) => void;
   onRoomDeleted?: () => void;
-  onCallJoined?: (callIdx: number) => void;
 }) {
-  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onSpeechCaption, onTranslation, onRoomDeleted, onCallJoined } = params;
+  const { roomId, userId, nickname, localVideoStream, localAudioStream, screenStream, isSpeaking, onCaption, onSpeechCaption, onTranslation, onRoomDeleted } = params;
   const [remoteParticipants, setRemoteParticipants] = useState<Participant[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
@@ -170,8 +169,6 @@ export function useWebRTC(params: {
   onTranslationRef.current = onTranslation;
   const onRoomDeletedRef = useRef<typeof onRoomDeleted>(onRoomDeleted);
   onRoomDeletedRef.current = onRoomDeleted;
-  const onCallJoinedRef = useRef<typeof onCallJoined>(onCallJoined);
-  onCallJoinedRef.current = onCallJoined;
 
   const roomIdx = Number(roomId);
 
@@ -708,15 +705,7 @@ export function useWebRTC(params: {
       const handleExistingParticipants = (payload?: {
         participants?: CallPeerInfo[];
         users?: CallPeerInfo[];
-        callIdx?: number;
-        call?: { callIdx?: number };
       } | CallPeerInfo[]) => {
-        if (!Array.isArray(payload)) {
-          const callIdx = payload?.callIdx ?? payload?.call?.callIdx;
-          if (typeof callIdx === "number" && callIdx > 0) {
-            onCallJoinedRef.current?.(callIdx);
-          }
-        }
         const participants = Array.isArray(payload)
           ? payload
           : payload?.participants ?? payload?.users ?? [];

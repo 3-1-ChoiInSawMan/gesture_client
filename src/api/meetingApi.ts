@@ -52,8 +52,8 @@ const unwrap = <T>(response: { data?: T } | T): T => {
 };
 
 export const meetingApi = {
-  startMinutes: async (callIdx: string | number): Promise<MeetingMinutes> => {
-    const { data } = await api.post(`/meetings/start/calls/${callIdx}`, {});
+  startMinutes: async (roomIdx: string | number): Promise<MeetingMinutes> => {
+    const { data } = await api.post(`/meetings/start/rooms/${roomIdx}`, {});
     return unwrap<MeetingMinutes>(data);
   },
 

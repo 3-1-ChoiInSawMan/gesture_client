@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, LoaderCircle, UserRound, X } from "lucide-react";
+import { LoaderCircle, UserRound, X } from "lucide-react";
 import { friendApi, FriendRequest } from "@/api/friendApi";
 import { userApi, UserProfile } from "@/api/userApi";
 import { toast } from "react-toastify";
@@ -68,8 +68,8 @@ export default function FriendRequestsModal({ onClose, onChanged }: Props) {
                 <p className="text-[14px] font-semibold text-[#333333] truncate">{request.nickname || request.userId}</p>
                 <p className="text-[12px] text-[#999999] truncate">@{request.userId}</p>
               </button>
-              <button disabled={processing === request.friendshipIdx} onClick={() => process(request, false)} className="h-8 px-3 text-[12px] text-[#777777]">거절</button>
-              <button disabled={processing === request.friendshipIdx} onClick={() => process(request, true)} title="수락" className="w-8 h-8 rounded-[6px] bg-[#724BFD] text-white flex items-center justify-center"><Check size={15} /></button>
+              <button disabled={processing === request.friendshipIdx} onClick={() => process(request, false)} className="h-8 rounded-[6px] px-3 text-[12px] text-[#777777] disabled:opacity-50">거절</button>
+              <button disabled={processing === request.friendshipIdx} onClick={() => process(request, true)} className="h-8 rounded-[6px] bg-[#724BFD] px-3 text-[12px] font-semibold text-white disabled:opacity-50">수락</button>
             </div>
           ))}
         </div>

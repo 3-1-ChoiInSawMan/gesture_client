@@ -331,16 +331,14 @@ export default function VideoRoom({
     const url = isHostLeaving
       ? `${baseUrl}/call-rooms/${roomId}`
       : `${baseUrl}/call-rooms/${roomId}/leave`;
-    if (!isHostLeaving) {
-      fetch(`${baseUrl}/calls/${roomId}/leave`, {
-        method: "DELETE",
-        keepalive: true,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }).catch(() => {});
-    }
+    fetch(`${baseUrl}/calls/${roomId}/leave`, {
+      method: "DELETE",
+      keepalive: true,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }).catch(() => {});
     fetch(url, {
       method: "DELETE",
       keepalive: true,
@@ -590,6 +588,11 @@ export default function VideoRoom({
 
     try {
       if (isHostLeaving) {
+        try {
+          await callRoomApi.leaveCall(roomId);
+        } catch {
+          // 통화 세션이 이미 종료된 경우에도 통화방 삭제는 계속한다.
+        }
         await callRoomApi.deleteRoom(roomId);
         localStorage.removeItem("host_call_room_id");
       } else {

@@ -75,6 +75,39 @@ function getStatusCode(error: unknown): string {
   );
 }
 
+function getCurrentUserIdx(): number | null {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("accessToken");
+  const encodedPayload = token?.split(".")[1];
+  if (!encodedPayload) return null;
+
+  try {
+    const normalized = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(normalized)) as { idx?: number };
+    return Number.isInteger(payload.idx) ? Number(payload.idx) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function isJoinedToCallRoom(roomId: string | number): Promise<boolean> {
+  const userIdx = getCurrentUserIdx();
+  if (!userIdx) return false;
+
+  try {
+    const { data } = await api.get(`/calls/${roomId}/participants`);
+    const body = data?.data?.call ?? data?.data ?? data;
+    return (
+      Array.isArray(body?.participants) &&
+      body.participants.some(
+        (participant: { userIdx?: number }) => participant.userIdx === userIdx
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
 function parseRoomsPage(data: unknown): RoomsPage {
   const body = (data as Record<string, unknown>)?.data ?? data;
   const nested = body as Record<string, unknown>;
@@ -99,8 +132,12 @@ export const callRoomApi = {
     try {
       await api.post(`/calls/${roomId}/join`);
     } catch (error) {
-      // React Strict Mode 재실행이나 새로고침으로 이미 참여 중이면 세션은 준비된 상태다.
-      if (getStatusCode(error) === "CALL_004") return;
+      if (
+        getStatusCode(error) === "CALL_004" &&
+        (await isJoinedToCallRoom(roomId))
+      ) {
+        return;
+      }
       throw error;
     }
   },

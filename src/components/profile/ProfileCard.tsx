@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DefaultProfile } from "@/assets";
 import { User } from "@/store/authStore";
+import { friendApi } from "@/api/friendApi";
 
 interface Props {
   user: User;
@@ -11,6 +13,30 @@ interface Props {
 
 export default function ProfileCard({ user }: Props) {
   const router = useRouter();
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFriendCount = async () => {
+      try {
+        const count = await friendApi.getCount();
+        if (!cancelled) setFriendCount(count);
+      } catch {
+        try {
+          const friends = await friendApi.getFriends();
+          if (!cancelled) setFriendCount(friends.length);
+        } catch {
+          if (!cancelled) setFriendCount(0);
+        }
+      }
+    };
+
+    void loadFriendCount();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="w-full bg-[#F0EEFF] rounded-[20px] px-10 py-8 flex items-center justify-between relative">
@@ -51,17 +77,11 @@ export default function ProfileCard({ user }: Props) {
 
       <div className="flex items-center gap-8">
         <div className="w-px bg-[#D0C8F0]" style={{ height: "80px" }} />
-        <div className="flex gap-8">
-          {[
-            { value: user.stats.totalCalls, label: "누적 통화" },
-            { value: user.stats.friends, label: "친구" },
-            { value: user.stats.rooms, label: "참여 방" },
-          ].map((s) => (
-            <div key={s.label} className="flex flex-col items-center">
-              <p className="text-[28px] font-bold text-[#724BFD]">{s.value}</p>
-              <p className="text-[13px] text-[#666666]">{s.label}</p>
-            </div>
-          ))}
+        <div className="flex min-w-[72px] flex-col items-center">
+          <p className="text-[28px] font-bold text-[#724BFD]">
+            {friendCount ?? "-"}
+          </p>
+          <p className="text-[13px] text-[#666666]">친구</p>
         </div>
       </div>
     </div>

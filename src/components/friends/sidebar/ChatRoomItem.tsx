@@ -29,17 +29,17 @@ export default function ChatRoomItem({ room, isSelected, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+      className={`w-full min-w-0 overflow-hidden flex items-center gap-3 px-4 py-3 text-left transition-colors ${
         isSelected ? "bg-[#EDE9FF]" : "hover:bg-[#F5F5F5]"
       }`}
     >
       <RoomAvatar room={room} />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <p className="text-[14px] font-semibold text-[#333333] truncate">{room.name}</p>
+        <div className="flex min-w-0 items-center justify-between">
+          <p className="min-w-0 flex-1 text-[14px] font-semibold text-[#333333] truncate">{room.name}</p>
           <span className="text-[11px] text-[#AAAAAA] shrink-0 ml-2">{room.lastMessageTime}</span>
         </div>
-        <p className="text-[12px] text-[#888888] truncate mt-0.5">{room.lastMessage}</p>
+        <p className="mt-0.5 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-[#888888]">{room.lastMessage}</p>
       </div>
     </button>
   );

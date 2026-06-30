@@ -9,6 +9,7 @@ import { Message } from "../types";
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageList from "./MessageList";
+import { DmSocketMessage, useDmChatSocket } from "./useDmChatSocket";
 
 const formatDate = (value: string) => {
   const date = new Date(value);
@@ -54,6 +55,44 @@ export default function ChatWindow() {
   const room = rooms.find((item) => item.id === selectedRoomId);
   const roomMessages = selectedRoomId ? messages[selectedRoomId] ?? [] : [];
   const myId = user?.id ?? "me";
+
+  const handleSocketMessage = useCallback(
+    (item: DmSocketMessage, isOwn: boolean) => {
+      if (!room) return;
+      const sender = isOwn
+        ? {
+            id: myId,
+            nickname: user?.nickname ?? "나",
+            username: myId,
+            profileImage: user?.profileImage,
+          }
+        : room.members.find(
+            (member) => member.id === String(item.fromUserIdx)
+          );
+
+      addMessage(room.id, {
+        id: String(item.messageIdx),
+        roomId: room.id,
+        senderId: sender?.username ?? String(item.fromUserIdx),
+        senderName: sender?.nickname ?? "알 수 없는 사용자",
+        senderUsername: sender?.username ?? String(item.fromUserIdx),
+        senderProfileImage: sender?.profileImage,
+        content: item.message ?? "파일",
+        type: item.type,
+        fileUrl: item.fileUrl ?? undefined,
+        time: formatTime(item.createdAt),
+        date: formatDate(item.createdAt),
+      });
+      if (!isOwn) {
+        void chatRoomApi
+          .markAsRead(room.chatRoomIdx, item.messageIdx)
+          .catch(() => undefined);
+      }
+    },
+    [addMessage, myId, room, user]
+  );
+
+  const sendSocketMessage = useDmChatSocket(room, handleSocketMessage);
 
   const markLatestAsRead = useCallback(
     (messageItems: StoredChatMessage[]) => {
@@ -114,7 +153,7 @@ export default function ChatWindow() {
       }
     };
 
-    const timer = window.setInterval(poll, 2500);
+    const timer = window.setInterval(poll, 15000);
     return () => {
       disposed = true;
       window.clearInterval(timer);
@@ -145,6 +184,8 @@ export default function ChatWindow() {
   };
 
   const sendText = async (content: string) => {
+    if (sendSocketMessage(content)) return true;
+
     try {
       const sent = await chatRoomApi.sendText(room.chatRoomIdx, content);
       addMessage(room.id, toMessage(room.id, sent));

@@ -6,6 +6,8 @@ export interface ChatRoomSummary {
   imageUrl: string | null;
   participantCount: number;
   createdAt: string;
+  roomType?: "dm";
+  targetUserIdx?: number;
 }
 
 export interface ChatRoomParticipant {
@@ -23,6 +25,8 @@ export interface ChatRoomDetail {
   participants: ChatRoomParticipant[];
   createdAt: string;
   updatedAt: string;
+  roomType?: "dm";
+  targetUserIdx?: number;
 }
 
 export interface CreatedChatRoom {
@@ -67,6 +71,11 @@ export const chatRoomApi = {
   }): Promise<CreatedChatRoom> => {
     const { data } = await api.post("/chat-rooms", body);
     return unwrap<CreatedChatRoom>(data);
+  },
+
+  getOrCreateDm: async (targetUserIdx: number): Promise<ChatRoomDetail> => {
+    const { data } = await api.post("/chat-rooms/dm", { targetUserIdx });
+    return unwrap<ChatRoomDetail>(data);
   },
 
   getRooms: async (): Promise<ChatRoomSummary[]> => {

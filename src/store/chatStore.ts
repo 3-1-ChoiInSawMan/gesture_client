@@ -38,7 +38,15 @@ export const useChatStore = create<ChatStore>((set) => ({
   messages: {},
   selectedRoomId: null,
 
-  setRooms: (rooms) => set({ rooms }),
+  setRooms: (rooms) =>
+    set((state) => ({
+      rooms,
+      selectedRoomId:
+        state.selectedRoomId &&
+        rooms.some((room) => room.id === state.selectedRoomId)
+          ? state.selectedRoomId
+          : null,
+    })),
   setMessages: (roomId, messages) =>
     set((state) => ({
       messages: { ...state.messages, [roomId]: messages },

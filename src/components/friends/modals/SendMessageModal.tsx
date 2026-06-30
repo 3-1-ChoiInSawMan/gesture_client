@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { FriendUser } from "../types";
 import { useChatStore } from "@/store/chatStore";
-import { useAuthStore } from "@/store/authStore";
 import { toast } from "react-toastify";
 import { friendApi } from "@/api/friendApi";
 import { chatRoomApi } from "@/api/chatRoomApi";
@@ -28,7 +27,6 @@ export default function SendMessageModal({ onClose, onCreated }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   const { rooms, selectRoom } = useChatStore();
-  const currentUser = useAuthStore((state) => state.user);
 
   useEffect(() => {
     friendApi.getFriends().then((items) => {
@@ -62,13 +60,10 @@ export default function SendMessageModal({ onClose, onCreated }: Props) {
 
     setCreating(true);
     try {
-      const room = await chatRoomApi.create({
-        name: `${currentUser?.nickname ?? "나"}, ${selectedUser.nickname}`,
-        participantIds: [Number(selectedId)],
-      });
+      const room = await chatRoomApi.getOrCreateDm(Number(selectedId));
       await onCreated();
       selectRoom(`chat-${room.chatRoomIdx}`);
-      toast.success("채팅방 초대를 보냈습니다.");
+      toast.success(`${selectedUser.nickname}님과의 채팅방을 열었습니다.`);
       onClose();
     } catch {
       toast.error("채팅방을 만들지 못했습니다.");

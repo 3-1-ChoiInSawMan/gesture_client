@@ -10,7 +10,6 @@ import ChatWindow from "./chat/ChatWindow";
 import EmptyChatView from "./EmptyChatView";
 import AddFriendModal from "./modals/AddFriendModal";
 import SendMessageModal from "./modals/SendMessageModal";
-import CreateChatRoomModal from "./modals/CreateChatRoomModal";
 import FriendRequestsModal from "./modals/FriendRequestsModal";
 import { chatRoomApi, ChatRoomSummary } from "@/api/chatRoomApi";
 import { ChatRoom } from "./types";
@@ -37,17 +36,17 @@ async function loadChatRoom(
     (participant) => participant.userId !== currentUserId
   );
   const directTarget =
-    detail.participants.length === 2 && otherParticipants.length === 1
-      ? otherParticipants[0]
-      : undefined;
+    otherParticipants.find(
+      (participant) => participant.userIdx === summary.targetUserIdx
+    ) ?? otherParticipants[0];
   const latestMessage = latest.messages[0];
 
   return {
     id: `chat-${summary.chatRoomIdx}`,
     chatRoomIdx: summary.chatRoomIdx,
-    targetUserIdx: directTarget?.userIdx,
+    targetUserIdx: summary.targetUserIdx ?? directTarget?.userIdx,
     name: summary.name,
-    isGroup: summary.participantCount > 2,
+    isGroup: false,
     members: detail.participants.map((participant) => ({
       id: String(participant.userIdx),
       nickname: participant.nickname,
@@ -69,14 +68,16 @@ export default function FriendsPage() {
   const router = useRouter();
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showSendMessage, setShowSendMessage] = useState(false);
-  const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
 
   const loadChatRooms = useCallback(async () => {
     if (!user) return;
     const summaries = await chatRoomApi.getRooms();
+    const dmSummaries = summaries.filter(
+      (summary) => summary.roomType === "dm" && !!summary.targetUserIdx
+    );
     const results = await Promise.allSettled(
-      summaries.map((summary) => loadChatRoom(summary, user.id))
+      dmSummaries.map((summary) => loadChatRoom(summary, user.id))
     );
     setRooms(
       results
@@ -131,7 +132,6 @@ export default function FriendsPage() {
       <ChatSidebar
         onAddFriend={() => setShowAddFriend(true)}
         onNewMessage={() => setShowSendMessage(true)}
-        onCreateRoom={() => setShowCreateRoom(true)}
         onRequests={() => setShowRequests(true)}
       />
 
@@ -145,12 +145,6 @@ export default function FriendsPage() {
       {showSendMessage && (
         <SendMessageModal
           onClose={() => setShowSendMessage(false)}
-          onCreated={loadChatRooms}
-        />
-      )}
-      {showCreateRoom && (
-        <CreateChatRoomModal
-          onClose={() => setShowCreateRoom(false)}
           onCreated={loadChatRooms}
         />
       )}

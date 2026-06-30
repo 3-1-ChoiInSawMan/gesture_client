@@ -573,7 +573,11 @@ export default function VideoRoom({
         } catch {
           // 통화 세션이 이미 종료된 경우에도 통화방 삭제는 계속한다.
         }
-        await callRoomApi.deleteRoom(roomId);
+        try {
+          await callRoomApi.deleteRoom(roomId);
+        } catch {
+          // 방 삭제가 실패해도 클라이언트는 종료 처리한다.
+        }
         localStorage.removeItem("host_call_room_id");
       } else {
         try {
@@ -581,7 +585,11 @@ export default function VideoRoom({
         } catch {
           // 통화 참여 정보가 이미 정리됐어도 통화방 멤버십 나가기는 계속한다.
         }
-        await callRoomApi.leaveRoom(roomId);
+        try {
+          await callRoomApi.leaveRoom(roomId);
+        } catch {
+          // 방 이탈 실패 시에도 로컬 종료는 진행한다.
+        }
       }
       return true;
     } catch (error) {
@@ -661,7 +669,7 @@ export default function VideoRoom({
       saveMeetingNote({
         minutesIdx: minutes.minutesIdx,
         callIdx: minutes.callIdx,
-        roomIdx: minutes.roomIdx,
+        roomIdx: minutes.roomIdx ?? Number(roomId),
         userId: user?.id ?? "guest",
         roomId,
         roomTitle: currentRoomTitle,
@@ -732,7 +740,7 @@ export default function VideoRoom({
       saveMeetingNote({
         minutesIdx: completed.minutesIdx,
         callIdx: completed.callIdx,
-        roomIdx: completed.roomIdx,
+        roomIdx: completed.roomIdx ?? Number(roomId),
         userId: user?.id ?? "guest",
         roomId,
         roomTitle: currentRoomTitle,
@@ -782,14 +790,13 @@ export default function VideoRoom({
 
   const handleEndCall = useCallback(async () => {
     await finalizeMeetingNotes();
-    const didLeave = await leaveCurrentRoom();
-    if (!didLeave) return;
+    await leaveCurrentRoom();
     cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
     cameraStreamRef.current = null;
     cleanupAudio();
     screenStream?.getTracks().forEach((t) => t.stop());
     sessionStorage.removeItem("currentRoomId");
-    router.push("/call");
+    router.replace("/call");
   }, [router, cleanupAudio, screenStream, leaveCurrentRoom, finalizeMeetingNotes]);
 
   // 브라우저 닫기/새로고침 시 통화방 나가기

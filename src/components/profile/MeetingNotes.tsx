@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, X } from "lucide-react";
 import { meetingApi, MeetingMinutes } from "@/api/meetingApi";
 import { getMeetingNotes, MeetingNoteRecord } from "@/lib/meetingNotes";
@@ -15,113 +15,161 @@ function formatDateTime(value: string) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
+function buildLocalDraft(note: MeetingNoteRecord): MeetingNoteRecord {
+  return {
+    ...note,
+    attendeesText: note.attendeesText || note.attendees.join(", "),
+  };
+}
+
 function mergeServerMinutes(
-  local: MeetingNoteRecord,
+  base: MeetingNoteRecord,
   minutes: MeetingMinutes
 ): MeetingNoteRecord {
-  const summaryParts = [
+  const attendees = minutes.participants ?? base.attendees;
+  const conclusion = minutes.conclusion ?? base.conclusion;
+  const contentParts = [
     minutes.content,
     minutes.aiSummary,
-    minutes.conclusion?.filter(Boolean).length
-      ? `결론\n${minutes.conclusion
-          .filter((item): item is string => Boolean(item))
-          .map((item) => `- ${item}`)
-          .join("\n")}`
+    conclusion?.filter(Boolean).length
+      ? conclusion.filter((item): item is string => Boolean(item)).join("\n")
       : null,
   ].filter((item): item is string => Boolean(item));
 
   return {
-    ...local,
+    ...base,
     minutesIdx: minutes.minutesIdx,
     callIdx: minutes.callIdx,
     roomIdx: minutes.roomIdx,
-    title: minutes.title ?? local.title,
-    startedAt: minutes.startedAt ?? minutes.meetingDate ?? local.startedAt,
-    endedAt: minutes.endedAt ?? local.endedAt,
-    attendees: minutes.participants ?? local.attendees,
-    attendeesText: (minutes.participants ?? local.attendees).join(", "),
-    content: summaryParts.join("\n\n") || local.content,
+    title: minutes.title ?? base.title,
+    startedAt: minutes.startedAt ?? minutes.meetingDate ?? base.startedAt,
+    endedAt: minutes.endedAt ?? base.endedAt,
+    attendees,
+    attendeesText: attendees.join(", "),
+    content: contentParts.join("\n\n") || base.content,
     aiSummary: minutes.aiSummary,
-    conclusion: minutes.conclusion,
+    conclusion,
     status: minutes.status,
   };
 }
 
+function toNoteFromServer(
+  userId: string,
+  roomTitle: string,
+  roomIdx: number,
+  item: { minutesIdx: number; callIdx: number; title: string; meetingDate: string; status: "IN_PROGRESS" | "ENDED" },
+  details?: MeetingMinutes
+): MeetingNoteRecord {
+  const attendees = details?.participants ?? [];
+  return {
+    id: `server-${item.minutesIdx}`,
+    minutesIdx: item.minutesIdx,
+    callIdx: item.callIdx,
+    roomIdx,
+    userId,
+    roomId: String(roomIdx),
+    roomTitle,
+    title: details?.title ?? item.title,
+    startedAt: details?.startedAt ?? item.meetingDate,
+    endedAt: details?.endedAt ?? item.meetingDate,
+    attendees,
+    attendeesText: attendees.join(", "),
+    content: details?.content ?? details?.aiSummary ?? undefined,
+    aiSummary: details?.aiSummary ?? null,
+    conclusion: details?.conclusion ?? [],
+    status: details?.status ?? item.status,
+    createdAt: details?.meetingDate ?? item.meetingDate,
+  };
+}
+
 export default function MeetingNotes({ userId }: MeetingNotesProps) {
-  const [notes, setNotes] = useState<MeetingNoteRecord[]>(() =>
-    getMeetingNotes(userId)
-  );
+  const [notes, setNotes] = useState<MeetingNoteRecord[]>([]);
   const [selected, setSelected] = useState<MeetingNoteRecord | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const localNotes = useMemo(
+    () => getMeetingNotes(userId).map(buildLocalDraft),
+    [userId]
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const localNotes = getMeetingNotes(userId);
 
-    const loadServerNotes = async () => {
-      const indexed = new Map<number, MeetingNoteRecord>();
-      localNotes.forEach((note) => {
-        if (note.minutesIdx) indexed.set(note.minutesIdx, note);
-      });
+    const loadNotes = async () => {
+      setIsLoading(true);
+      try {
+        const localByMinutesIdx = new Map<number, MeetingNoteRecord>();
+        const localByRoomIdx = new Map<number, MeetingNoteRecord>();
 
-      const roomIndexes = Array.from(
-        new Set(
-          localNotes
-            .map((note) => note.roomIdx)
-            .filter((roomIdx): roomIdx is number => typeof roomIdx === "number")
-        )
-      );
-      const roomLists = await Promise.all(
-        roomIndexes.map((roomIdx) =>
-          meetingApi.getRoomMinutes(roomIdx).catch(() => [])
-        )
-      );
-      roomLists.flat().forEach((item) => {
-        if (indexed.has(item.minutesIdx)) return;
-        indexed.set(item.minutesIdx, {
-          id: `server-${item.minutesIdx}`,
-          minutesIdx: item.minutesIdx,
-          callIdx: item.callIdx,
-          userId,
-          roomId: "",
-          roomTitle: "회의",
-          title: item.title,
-          startedAt: item.meetingDate,
-          endedAt: item.meetingDate,
-          attendees: [],
-          status: item.status,
-          createdAt: item.meetingDate,
-        });
-      });
-
-      const refreshed = await Promise.all(
-        Array.from(indexed.values()).map(async (note) => {
-          if (!note.minutesIdx) return note;
-          try {
-            const minutes = await meetingApi.getMinutes(note.minutesIdx);
-            return mergeServerMinutes(note, minutes);
-          } catch {
-            return note;
+        localNotes.forEach((note) => {
+          if (typeof note.minutesIdx === "number") {
+            localByMinutesIdx.set(note.minutesIdx, note);
           }
-        })
-      );
-      const localOnly = localNotes.filter((note) => !note.minutesIdx);
-      const merged = [...refreshed, ...localOnly].sort(
-        (a, b) =>
-          new Date(b.startedAt || b.createdAt).getTime() -
-          new Date(a.startedAt || a.createdAt).getTime()
-      );
-      if (!cancelled) setNotes(merged);
+          const resolvedRoomIdx =
+            typeof note.roomIdx === "number" && Number.isFinite(note.roomIdx)
+              ? note.roomIdx
+              : Number(note.roomId);
+          if (Number.isFinite(resolvedRoomIdx) && !localByRoomIdx.has(resolvedRoomIdx)) {
+            localByRoomIdx.set(resolvedRoomIdx, note);
+          }
+        });
+
+        const roomIdxs = Array.from(localByRoomIdx.keys());
+        const roomResults = await Promise.all(
+          roomIdxs.map(async (roomIdx) => {
+            const roomNotes = await meetingApi.getRoomMinutes(roomIdx).catch(() => []);
+            return { roomIdx, roomNotes };
+          })
+        );
+
+        const serverNotes: MeetingNoteRecord[] = [];
+        for (const { roomIdx, roomNotes } of roomResults) {
+          const roomTitle = localByRoomIdx.get(roomIdx)?.roomTitle || `통화방 ${roomIdx}`;
+          for (const item of roomNotes) {
+            const local = localByMinutesIdx.get(item.minutesIdx);
+            const base =
+              local ??
+              toNoteFromServer(userId, roomTitle, roomIdx, item);
+            let note = base;
+
+            if (!local) {
+              try {
+                const details = await meetingApi.getMinutes(item.minutesIdx);
+                note = mergeServerMinutes(base, details);
+              } catch {
+                note = base;
+              }
+            }
+
+            serverNotes.push(note);
+          }
+        }
+
+        const localOnly = localNotes.filter((note) => !note.minutesIdx);
+        const merged = [...serverNotes, ...localOnly].sort((a, b) => {
+          const right = new Date(b.startedAt || b.createdAt).getTime();
+          const left = new Date(a.startedAt || a.createdAt).getTime();
+          return right - left;
+        });
+
+        if (!cancelled) setNotes(merged);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
 
-    void loadServerNotes();
+    void loadNotes();
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [localNotes, userId]);
+
+  const visibleNotes = showAll ? notes : notes.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-3">
@@ -130,7 +178,7 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
           <ClipboardList size={17} className="text-[#724BFD]" />
           <p className="text-[16px] font-bold text-[#333333]">회의록</p>
         </div>
-        {notes.length > 5 && (
+        {notes.length > 5 && !showAll && (
           <button
             onClick={() => setShowAll(true)}
             className="text-[13px] text-[#724BFD]"
@@ -140,13 +188,17 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
         )}
       </div>
 
-      {notes.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center border border-[#EEEEEE] rounded-[14px] min-h-[96px]">
+          <p className="text-[13px] text-[#AAAAAA]">회의록을 불러오는 중입니다.</p>
+        </div>
+      ) : notes.length === 0 ? (
         <div className="flex items-center justify-center border border-[#EEEEEE] rounded-[14px] min-h-[96px]">
           <p className="text-[13px] text-[#AAAAAA]">저장된 회의록이 없습니다.</p>
         </div>
       ) : (
         <div className="flex flex-col border border-[#EEEEEE] rounded-[14px] overflow-hidden divide-y divide-[#EEEEEE]">
-          {notes.slice(0, 5).map((note) => (
+          {visibleNotes.map((note) => (
             <button
               key={note.id}
               onClick={() => setSelected(note)}
@@ -160,11 +212,11 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
                   {note.title}
                 </p>
                 <p className="text-[12px] text-[#AAAAAA] truncate">
-                  {note.attendees.join(", ")}
+                  {note.attendeesText || note.attendees.join(", ")}
                 </p>
               </div>
               <p className="text-[11px] text-[#AAAAAA] shrink-0">
-                {formatDateTime(note.createdAt)}
+                {formatDateTime(note.createdAt || note.startedAt)}
               </p>
             </button>
           ))}
@@ -206,7 +258,7 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
                     </p>
                   </div>
                   <p className="text-[11px] text-[#AAAAAA] shrink-0">
-                    {formatDateTime(note.createdAt)}
+                    {formatDateTime(note.createdAt || note.startedAt)}
                   </p>
                 </button>
               ))}
@@ -234,9 +286,10 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
                 <p className="mt-1 text-[15px] font-semibold text-[#333333]">{selected.title}</p>
               </div>
               <div>
-                <p className="text-[12px] font-semibold text-[#888888]">일시</p>
+                <p className="text-[12px] font-semibold text-[#888888]">시간</p>
                 <p className="mt-1 text-[13px] text-[#555555]">
-                  {selected.displayDateTime || `${formatDateTime(selected.startedAt)} - ${formatDateTime(selected.endedAt)}`}
+                  {selected.displayDateTime ||
+                    `${formatDateTime(selected.startedAt)} - ${formatDateTime(selected.endedAt)}`}
                 </p>
               </div>
               <div>
@@ -248,7 +301,7 @@ export default function MeetingNotes({ userId }: MeetingNotesProps) {
               <div className="rounded-[10px] bg-[#F7F7FA] px-4 py-3">
                 <p className="text-[12px] font-semibold text-[#888888]">내용</p>
                 <p className="mt-2 whitespace-pre-wrap text-[13px] leading-6 text-[#555555]">
-                  {selected.content || "AI가 회의 내용을 채워줄 예정입니다."}
+                  {selected.content || "저장된 회의 내용이 없습니다."}
                 </p>
               </div>
             </div>

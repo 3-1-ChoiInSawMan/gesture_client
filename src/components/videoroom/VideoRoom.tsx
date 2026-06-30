@@ -87,28 +87,8 @@ export default function VideoRoom({
   const meetingTranscriptRef = useRef<string[]>([]);
   const meetingAttendeesTouchedRef = useRef(false);
   const meetingDateTouchedRef = useRef(false);
-  const callSessionPromiseRef = useRef<Promise<void> | null>(null);
   const [isMeetingNoteRecording, setIsMeetingNoteRecording] = useState(false);
   const [isMeetingNoteStarting, setIsMeetingNoteStarting] = useState(false);
-
-  const ensureCallSession = useCallback(() => {
-    if (!callSessionPromiseRef.current) {
-      callSessionPromiseRef.current = callRoomApi.joinCall(roomId).catch((error) => {
-        callSessionPromiseRef.current = null;
-        throw error;
-      });
-    }
-    return callSessionPromiseRef.current;
-  }, [roomId]);
-
-  useEffect(() => {
-    void ensureCallSession().catch((error) => {
-      const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "통화 세션에 참여하지 못했습니다.";
-      toast.error(message);
-    });
-  }, [ensureCallSession]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -655,7 +635,6 @@ export default function VideoRoom({
     setIsMeetingNoteStarting(true);
 
     try {
-      await ensureCallSession();
       const minutes = await meetingApi.startMinutes(roomId);
       const startedAt = minutes.startedAt
         ? new Date(minutes.startedAt)
@@ -706,7 +685,6 @@ export default function VideoRoom({
     }
   }, [
     currentRoomTitle,
-    ensureCallSession,
     isMeetingNoteStarting,
     meetingAttendees,
     meetingNotesDraft,

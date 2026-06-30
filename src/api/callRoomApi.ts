@@ -51,63 +51,6 @@ export interface RoomsPage {
   pageNumber: number;
 }
 
-export interface CallParticipant {
-  userIdx: number;
-  nickname: string;
-  joinedAt?: string;
-  isHost?: boolean;
-  host?: boolean;
-}
-
-export interface CallParticipantsResponse {
-  callIdx: number;
-  roomIdx: number;
-  participants: CallParticipant[];
-  currentParticipant: number;
-}
-
-function getStatusCode(error: unknown): string {
-  return String(
-    (error as { response?: { data?: { statusCode?: string; code?: string } } })
-      ?.response?.data?.statusCode ??
-      (error as { response?: { data?: { code?: string } } })?.response?.data?.code ??
-      ""
-  );
-}
-
-function getCurrentUserIdx(): number | null {
-  if (typeof window === "undefined") return null;
-  const token = localStorage.getItem("accessToken");
-  const encodedPayload = token?.split(".")[1];
-  if (!encodedPayload) return null;
-
-  try {
-    const normalized = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(atob(normalized)) as { idx?: number };
-    return Number.isInteger(payload.idx) ? Number(payload.idx) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function isJoinedToCallRoom(roomId: string | number): Promise<boolean> {
-  const userIdx = getCurrentUserIdx();
-  if (!userIdx) return false;
-
-  try {
-    const { data } = await api.get(`/calls/${roomId}/participants`);
-    const body = data?.data?.call ?? data?.data ?? data;
-    return (
-      Array.isArray(body?.participants) &&
-      body.participants.some(
-        (participant: { userIdx?: number }) => participant.userIdx === userIdx
-      )
-    );
-  } catch {
-    return false;
-  }
-}
-
 function parseRoomsPage(data: unknown): RoomsPage {
   const body = (data as Record<string, unknown>)?.data ?? data;
   const nested = body as Record<string, unknown>;
@@ -128,46 +71,8 @@ function parseRoomsPage(data: unknown): RoomsPage {
 }
 
 export const callRoomApi = {
-  joinCall: async (roomId: string | number): Promise<void> => {
-    try {
-      await api.post(`/calls/${roomId}/join`);
-    } catch (error) {
-      if (
-        getStatusCode(error) === "CALL_004" &&
-        (await isJoinedToCallRoom(roomId))
-      ) {
-        return;
-      }
-      throw error;
-    }
-  },
-
   leaveCall: async (roomId: string | number): Promise<void> => {
     await api.delete(`/calls/${roomId}/leave`);
-  },
-
-  getCallParticipants: async (
-    roomId: string | number
-  ): Promise<CallParticipantsResponse> => {
-    const { data, status } = await api.get(`/calls/${roomId}/participants`, {
-      validateStatus: (responseStatus) =>
-        (responseStatus >= 200 && responseStatus < 300) || responseStatus === 404,
-    });
-    if (status === 404) {
-      return {
-        callIdx: 0,
-        roomIdx: Number(roomId),
-        participants: [],
-        currentParticipant: 0,
-      };
-    }
-    const body = data?.data?.call ?? data?.data ?? data;
-    return {
-      callIdx: body?.callIdx ?? 0,
-      roomIdx: body?.roomIdx ?? Number(roomId),
-      participants: Array.isArray(body?.participants) ? body.participants : [],
-      currentParticipant: body?.currentParticipant ?? 0,
-    };
   },
 
   getRooms: async (params?: {

@@ -109,22 +109,26 @@ export const callRoomApi = {
     roomId: string | number,
     password?: string
   ): Promise<void> => {
-    const { data } = await api.post(
-      `/call-rooms/${roomId}/join`,
-      password ? { password } : undefined
-    );
-    // 서버가 HTTP 200으로 실패를 반환하는 경우 처리 (success: false)
-    const isFailure = data?.success === false || String(data?.success) === "false";
-    if (isFailure) {
-      const statusCode: string = data?.statusCode ?? "";
-      // ROOM_003: 이미 참여 중 → 정상 입장 처리
-      if (statusCode === "ROOM_003") return;
-      // 그 외 실패 (비밀번호 오류 등) → 에러로 변환
+    try {
+      const { data } = await api.post(
+        `/call-rooms/${roomId}/join`,
+        password ? { password } : undefined
+      );
+      const isFailure =
+        data?.success === false || String(data?.success) === "false";
+      if (!isFailure) return;
+
+      if (data?.statusCode === "ROOM_003") return;
       const message: string = data?.message ?? "통화방 참여에 실패했습니다.";
-      const err = Object.assign(new Error(message), {
+      throw Object.assign(new Error(message), {
         response: { status: 400, data: { message } },
       });
-      throw err;
+    } catch (error) {
+      const statusCode = (
+        error as { response?: { data?: { statusCode?: string } } }
+      )?.response?.data?.statusCode;
+      if (statusCode === "ROOM_003") return;
+      throw error;
     }
   },
 

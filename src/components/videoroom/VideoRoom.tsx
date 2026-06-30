@@ -635,6 +635,7 @@ export default function VideoRoom({
     setIsMeetingNoteStarting(true);
 
     try {
+      await callRoomApi.joinRoom(roomId);
       const minutes = await meetingApi.startMinutes(roomId);
       const startedAt = minutes.startedAt
         ? new Date(minutes.startedAt)

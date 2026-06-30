@@ -32,6 +32,13 @@ function formatRecentTime(value: string) {
   return date.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
 
+function truncateMessage(value: string, maxLength = 25) {
+  const characters = Array.from(value);
+  return characters.length > maxLength
+    ? `${characters.slice(0, maxLength).join("")}...`
+    : value;
+}
+
 export default function RecentChats() {
   const router = useRouter();
   const selectRoom = useChatStore((state) => state.selectRoom);
@@ -57,10 +64,11 @@ export default function RecentChats() {
             return {
               chatRoomIdx: room.chatRoomIdx,
               name: room.name,
-              message:
+              message: truncateMessage(
                 latest?.type === "FILE"
                   ? "파일"
-                  : latest?.message ?? "아직 메시지가 없습니다.",
+                  : latest?.message ?? "아직 메시지가 없습니다."
+              ),
               time: formatRecentTime(latestAt),
               timestamp: new Date(latestAt).getTime() || 0,
             };

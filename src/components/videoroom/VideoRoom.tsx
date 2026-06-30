@@ -16,7 +16,6 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
 }
 import { useRouter } from "next/navigation";
 import { Captions, HelpCircle, MicOff, Settings } from "lucide-react";
-import { io, Socket } from "socket.io-client";
 import StreamVideo from "./StreamVideo";
 import { ActivePanel, ChatMessage, Participant } from "./types";
 import { SCREEN_SHARE_PARTICIPANT } from "./mockData";
@@ -83,9 +82,9 @@ export default function VideoRoom({
   const meetingNoteSavedRef = useRef(false);
   const meetingNoteRecordingRef = useRef(false);
   const meetingMinutesRef = useRef<MeetingMinutes | null>(null);
-  const meetingSocketRef = useRef<Socket | null>(null);
   const meetingNoteFinalizingRef = useRef<Promise<void> | null>(null);
   const meetingNoteStartedAtRef = useRef<Date | null>(null);
+  const meetingTranscriptRef = useRef<string[]>([]);
   const meetingAttendeesTouchedRef = useRef(false);
   const meetingDateTouchedRef = useRef(false);
   const callSessionPromiseRef = useRef<Promise<void> | null>(null);
@@ -239,6 +238,9 @@ export default function VideoRoom({
   const speechCaptionQueueRef = useRef<number[]>([]);
 
   const showCaption = useCallback((name: string, text: string) => {
+    if (meetingNoteRecordingRef.current && text.trim()) {
+      meetingTranscriptRef.current.push(`${name}: ${text.trim()}`);
+    }
     const id = ++captionIdRef.current;
     captionQueueRef.current.push(id);
     const removedId =
@@ -264,6 +266,9 @@ export default function VideoRoom({
   }, []);
 
   const showSpeechCaption = useCallback((name: string, text: string) => {
+    if (meetingNoteRecordingRef.current && text.trim()) {
+      meetingTranscriptRef.current.push(`${name}: ${text.trim()}`);
+    }
     const id = ++captionIdRef.current;
     speechCaptionQueueRef.current.push(id);
     const removedId =
@@ -642,35 +647,6 @@ export default function VideoRoom({
     [defaultAttendeesText, meetingNotesDraft.displayDateTime]
   );
 
-  const connectMeetingSocket = useCallback(
-    (minutesIdx: number) => {
-      meetingSocketRef.current?.disconnect();
-      const serverOrigin =
-        window.location.protocol === "https:"
-          ? window.location.origin
-          : (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/api\/v1\/?$/, "");
-      const token = localStorage.getItem("accessToken");
-      const socket = io(`${serverOrigin}/v1/meetings/${minutesIdx}`, {
-        transports: ["websocket", "polling"],
-        auth: token ? { token } : undefined,
-        extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      socket.on("connect", () => {
-        socket.emit("join_room", { call_room_id: String(roomId) });
-      });
-      meetingSocketRef.current = socket;
-    },
-    [roomId]
-  );
-
-  useEffect(
-    () => () => {
-      meetingSocketRef.current?.disconnect();
-      meetingSocketRef.current = null;
-    },
-    []
-  );
-
   const handleStartMeetingNotes = useCallback(async () => {
     if (meetingNoteRecordingRef.current || isMeetingNoteStarting) return;
     setIsMeetingNoteStarting(true);
@@ -688,7 +664,7 @@ export default function VideoRoom({
       const title = meetingNotesDraft.title.trim() || "회의록";
 
       meetingMinutesRef.current = minutes;
-      connectMeetingSocket(minutes.minutesIdx);
+      meetingTranscriptRef.current = [];
       meetingNoteRecordingRef.current = true;
       meetingNoteStartedAtRef.current = startedAt;
       setIsMeetingNoteRecording(true);
@@ -727,7 +703,6 @@ export default function VideoRoom({
     }
   }, [
     currentRoomTitle,
-    connectMeetingSocket,
     ensureCallSession,
     isMeetingNoteStarting,
     meetingAttendees,
@@ -747,6 +722,17 @@ export default function VideoRoom({
       }
 
       const requestedTitle = meetingNotesDraft.title.trim();
+      const attendeesText = meetingNotesDraft.attendeesText.trim();
+      const requestedAttendees = attendeesText
+        ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
+        : meetingAttendees;
+      await meetingApi.createMinutes(roomId, {
+        title: requestedTitle || "회의록",
+        transcript:
+          meetingTranscriptRef.current.join("\n") || "기록된 발언이 없습니다.",
+        participants: requestedAttendees,
+        conclusion: [],
+      });
       const ended = await meetingApi.endMinutes(minutes.minutesIdx);
       const completed =
         requestedTitle && requestedTitle !== ended.title
@@ -754,12 +740,8 @@ export default function VideoRoom({
               title: requestedTitle,
             })
           : ended;
-      const attendeesText = meetingNotesDraft.attendeesText.trim();
       const attendees =
-        completed.participants?.filter(Boolean) ??
-        (attendeesText
-          ? attendeesText.split(",").map((name) => name.trim()).filter(Boolean)
-          : meetingAttendees);
+        completed.participants?.filter(Boolean) ?? requestedAttendees;
       const startedAt =
         completed.startedAt ??
         meetingNoteStartedAtRef.current?.toISOString() ??
@@ -785,8 +767,7 @@ export default function VideoRoom({
       });
       meetingNoteSavedRef.current = true;
       meetingNoteRecordingRef.current = false;
-      meetingSocketRef.current?.disconnect();
-      meetingSocketRef.current = null;
+      meetingTranscriptRef.current = [];
       setIsMeetingNoteRecording(false);
       toast.success("회의록이 마이페이지에 저장되었습니다.");
     })()

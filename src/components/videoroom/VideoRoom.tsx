@@ -355,7 +355,7 @@ export default function VideoRoom({
   }, [router, cleanupAudio]);
 
   // ── WebRTC ───────────────────────────────────────────────
-  const { remoteParticipants: receivedParticipants, sendFrame, sendAudio, connectionState, connectionError, aiError, leaveCall, retry } = useWebRTC({
+  const { remoteParticipants: receivedParticipants, sendFrame, sendAudio, connectionState, connectionError, leaveCall, retry } = useWebRTC({
     roomId,
     userId: user?.id ?? "",
     localVideoStream: cameraStream,
@@ -911,9 +911,6 @@ export default function VideoRoom({
             <button type="button" onClick={retry} className="rounded bg-[#724BFD] px-3 py-1">다시 연결</button>
           )}
         </div>
-      )}
-      {connectionState === "connected" && aiError && (
-        <div role="status" className="bg-amber-950 px-4 py-2 text-center text-xs text-amber-100">{aiError}</div>
       )}
       {tutorialStep && (
         <VideoRoomTutorial

@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 // BACKEND_URL은 서버사이드 전용 (NEXT_PUBLIC_ 없음) — Vercel에서 설정 필요
 // 미설정 시 기본값으로 폴백
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://3.35.173.178:8080";
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://13.209.81.30:8080";
 
 const nextConfig: NextConfig = {
   images: {
@@ -42,6 +42,11 @@ const nextConfig: NextConfig = {
         destination: `${BACKEND_URL}/api/media/:path*`,
       },
       // socket.io 프록시: WebRTC + 채팅 소켓
+      // Next normalizes the browser URL to /socket.io; Engine.IO requires /socket.io/.
+      {
+        source: "/socket.io",
+        destination: `${BACKEND_URL}/socket.io/`,
+      },
       {
         source: "/socket.io/:path*",
         destination: `${BACKEND_URL}/socket.io/:path*`,

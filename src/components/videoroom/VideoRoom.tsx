@@ -9,8 +9,15 @@ function RemoteAudio({ stream }: { stream: MediaStream }) {
     const el = ref.current;
     if (!el) return;
     el.srcObject = stream;
-    el.play().catch(() => {});
-    return () => { el.srcObject = null; };
+    const play = () => { void el.play().catch(() => {}); };
+    play();
+    window.addEventListener("pointerdown", play);
+    window.addEventListener("keydown", play);
+    return () => {
+      window.removeEventListener("pointerdown", play);
+      window.removeEventListener("keydown", play);
+      el.srcObject = null;
+    };
   }, [stream]);
   return <audio ref={ref} autoPlay />;
 }
@@ -32,6 +39,7 @@ import { useSignLanguage } from "./useSignLanguage";
 import { useSpeechToText } from "./useSpeechToText";
 import { useChatSocket } from "./useChatSocket";
 import { useWebRTC } from "./useWebRTC";
+import { useRemoteSpeaking } from "./useRemoteSpeaking";
 import { callRoomApi } from "@/api/callRoomApi";
 import { meetingApi, MeetingMinutes } from "@/api/meetingApi";
 import { useAuthStore } from "@/store/authStore";
@@ -183,13 +191,16 @@ export default function VideoRoom({
       setMyIsSpeaking(false);
       return;
     }
+    let cancelled = false;
     navigator.mediaDevices
       .getUserMedia({ audio: true, video: false })
       .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
         audioStreamRef.current = stream;
         setMicStream(stream);
         const ctx = new AudioContext();
         audioContextRef.current = ctx;
+        void ctx.resume().catch(() => {});
         const source = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
@@ -204,8 +215,8 @@ export default function VideoRoom({
         };
         tick();
       })
-      .catch(() => {});
-    return cleanupAudio;
+      .catch(() => { if (!cancelled) setIsMicOn(false); });
+    return () => { cancelled = true; cleanupAudio(); };
   }, [isMicOn, cleanupAudio]);
 
   // ── 자막 (닉네임 → 텍스트 맵, 동시에 여러 명 자막 표시) ──────
@@ -286,10 +297,15 @@ export default function VideoRoom({
 
   // ── 화면 공유 스트림 ──────────────────────────────────────
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-
-  // isDetecting은 useSignLanguage에서 오지만, useWebRTC의 onTranslation 콜백에서
-  // 참조해야 하므로 ref로 동기화 (렌더마다 갱신)
-  const isDetectingRef = useRef(false);
+  const screenStreamRef = useRef<MediaStream | null>(null);
+  const mediaMountedRef = useRef(true);
+  useEffect(() => {
+    mediaMountedRef.current = true;
+    return () => {
+      mediaMountedRef.current = false;
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   // 중복 호출 방지 플래그 (sendLeaveBeacon, handleRoomDeleted 공유)
   const leaveCalledRef = useRef(false);
@@ -339,34 +355,20 @@ export default function VideoRoom({
   }, [router, cleanupAudio]);
 
   // ── WebRTC ───────────────────────────────────────────────
-  const { remoteParticipants, sendCaption, sendSpeechCaption, sendFrame } = useWebRTC({
+  const { remoteParticipants: receivedParticipants, sendFrame, sendAudio, connectionState, connectionError, aiError, leaveCall, retry } = useWebRTC({
     roomId,
     userId: user?.id ?? "",
-    nickname: user?.nickname ?? "익명",
     localVideoStream: cameraStream,
     localAudioStream: micStream,
     screenStream,
-    isSpeaking: isMicOn && myIsSpeaking,
     onCaption: showCaption,
     onSpeechCaption: showSpeechCaption,
-    onTranslation: (text) => {
-      // 내가 실제로 손을 감지 중일 때만 내 번역으로 처리
-      // → 여러 명이 카메라 켜도 손이 감지된 사람만 자막 claim
-      if (!isDetectingRef.current) return;
-      const myName = user?.nickname ?? "나";
-      showCaption(myName, text);
-      sendCaption(text);
-    },
-    onRoomDeleted: handleRoomDeleted,
   });
 
-  useSpeechToText(micStream, (text) => {
-    const myName = user?.nickname ?? "Unknown";
-    showSpeechCaption(myName, text);
-    sendSpeechCaption(text);
-  });
+  useSpeechToText(connectionState === "connected" ? micStream : null, sendAudio);
+  const remoteParticipants = useRemoteSpeaking(receivedParticipants);
 
-  // 원격 발화 상태는 DataChannel로 수신된 p.isSpeaking 사용
+  // 원격 발화 상태는 수신 오디오에서 분석한다.
   const remoteSpeakingId = remoteParticipants.find((p) => p.isSpeaking)?.id ?? "";
 
   // ── 참여자 목록 (나 + 원격) ─────────────────────────────────
@@ -473,10 +475,9 @@ export default function VideoRoom({
   }, []);
 
   const stopScreenShare = useCallback(() => {
-    setScreenStream((prev) => {
-      prev?.getTracks().forEach((t) => t.stop());
-      return null;
-    });
+    screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+    screenStreamRef.current = null;
+    setScreenStream(null);
     setIsScreenSharing(false);
     setMainParticipantId(remoteParticipantsRef.current[0]?.id ?? "me");
   }, []);
@@ -489,10 +490,14 @@ export default function VideoRoom({
     if (someoneElseSharing) return;
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      if (!mediaMountedRef.current) { stream.getTracks().forEach((track) => track.stop()); return; }
+      screenStreamRef.current = stream;
       setScreenStream(stream);
       setIsScreenSharing(true);
       setMainParticipantId("screen-share");
-      stream.getVideoTracks()[0]?.addEventListener("ended", stopScreenShare);
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        if (mediaMountedRef.current) stopScreenShare();
+      }, { once: true });
     } catch {
       // 사용자가 취소한 경우
     }
@@ -569,38 +574,30 @@ export default function VideoRoom({
     try {
       if (isHostLeaving) {
         try {
-          await callRoomApi.leaveCall(roomId);
+          await leaveCall();
         } catch {
           // 통화 세션이 이미 종료된 경우에도 통화방 삭제는 계속한다.
         }
-        try {
-          await callRoomApi.deleteRoom(roomId);
-        } catch {
-          // 방 삭제가 실패해도 클라이언트는 종료 처리한다.
-        }
+        await callRoomApi.deleteRoom(roomId);
         localStorage.removeItem("host_call_room_id");
       } else {
         try {
-          await callRoomApi.leaveCall(roomId);
+          await leaveCall();
         } catch {
           // 통화 참여 정보가 이미 정리됐어도 통화방 멤버십 나가기는 계속한다.
         }
-        try {
-          await callRoomApi.leaveRoom(roomId);
-        } catch {
-          // 방 이탈 실패 시에도 로컬 종료는 진행한다.
-        }
+        await callRoomApi.leaveRoom(roomId);
       }
       return true;
     } catch (error) {
       leaveCalledRef.current = false;
       const message =
         (error as { response?: { data?: { message?: string } } })?.response
-          ?.data?.message ?? "통화방 나가기에 실패했습니다.";
+          ?.data?.message ?? (error instanceof Error ? error.message : "통화방 나가기에 실패했습니다.");
       toast.error(message);
       return false;
     }
-  }, [roomId]);
+  }, [roomId, leaveCall]);
 
   const togglePanel = useCallback((panel: Exclude<ActivePanel, null>) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
@@ -844,10 +841,6 @@ export default function VideoRoom({
     isCameraOn,
     sendFrame
   );
-  // onTranslation 콜백에서 손 감지 여부 참조용 (렌더마다 최신값 유지)
-  useEffect(() => {
-    isDetectingRef.current = isDetecting;
-  }, [isDetecting]);
 
   const isMainSpeaking =
     mainParticipantId === "me"
@@ -911,6 +904,17 @@ export default function VideoRoom({
 
   return (
     <div className="flex flex-col w-screen h-screen bg-black overflow-hidden relative">
+      {connectionState !== "connected" && connectionState !== "closed" && (
+        <div role="status" className="z-30 flex items-center justify-center gap-3 bg-slate-900 px-4 py-3 text-sm text-white">
+          <span>{connectionError ?? "통화 서버에 연결 중입니다…"}</span>
+          {connectionState === "error" && (
+            <button type="button" onClick={retry} className="rounded bg-[#724BFD] px-3 py-1">다시 연결</button>
+          )}
+        </div>
+      )}
+      {connectionState === "connected" && aiError && (
+        <div role="status" className="bg-amber-950 px-4 py-2 text-center text-xs text-amber-100">{aiError}</div>
+      )}
       {tutorialStep && (
         <VideoRoomTutorial
           step={tutorialStep}

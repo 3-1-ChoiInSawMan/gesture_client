@@ -71,6 +71,13 @@ function parseRoomsPage(data: unknown): RoomsPage {
 }
 
 export const callRoomApi = {
+  joinCall: async (roomId: string | number): Promise<void> => {
+    const { data } = await api.post(`/calls/${roomId}/join`);
+    if (data?.success === false || data?.success === "false") {
+      throw new Error(data?.message ?? "통화 참여 등록에 실패했습니다.");
+    }
+  },
+
   leaveCall: async (roomId: string | number): Promise<void> => {
     await api.delete(`/calls/${roomId}/leave`);
   },
@@ -140,11 +147,17 @@ export const callRoomApi = {
   },
 
   leaveRoom: async (roomId: string | number): Promise<void> => {
-    await api.delete(`/call-rooms/${roomId}/leave`);
+    const { data } = await api.delete(`/call-rooms/${roomId}/leave`);
+    if (data?.success === false || data?.success === "false") {
+      throw new Error(data?.message ?? "통화방 나가기에 실패했습니다.");
+    }
   },
 
   deleteRoom: async (roomId: string | number): Promise<void> => {
-    await api.delete(`/call-rooms/${roomId}`);
+    const { data } = await api.delete(`/call-rooms/${roomId}`);
+    if (data?.success === false || data?.success === "false") {
+      throw new Error(data?.message ?? "통화방 삭제에 실패했습니다.");
+    }
   },
 
   searchRooms: async (keyword: string): Promise<ApiCallRoom[]> => {

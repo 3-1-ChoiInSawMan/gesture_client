@@ -9,13 +9,15 @@ The web frontend for a video calling service that helps people communicate using
 | Feature | Description |
 | --- | --- |
 | Video calls | mediasoup SFU audio/video, camera and microphone controls, screen sharing |
-| Captions | Sends MediaPipe landmarks and microphone audio to the BFF and displays translation results |
+| Captions | Sends sign landmarks to the BFF and audio directly to AI `/cc_stt`, then displays results |
 | Call rooms | Room creation and participation, participant lists, public and private rooms |
 | Communication | Chat, friends, and sign language quick slots |
 | Meeting notes | Caption transcripts and meeting notes API integration |
 | Accounts | Email verification, login, and profile management |
 
-> Captions and meeting notes require backend and AI services. Sign language DTO compatibility and the STT routing contract are still being checked. A working video call does not guarantee working captions.
+> Captions and meeting notes require backend and AI services. Audio streams directly to AI; recognized speech text is shared over the existing call-room chat relay and rendered as speech captions. All participants must use the updated frontend and enable captions.
+
+The client now sends MediaRecorder audio (WebM/Opus preferred) as binary chunks, matching the AI test tool. Long-running decoding still needs validation: the AI sliding chunk buffer may discard the container header. See the [caption contract review](docs/caption-contract-review.md) (Korean).
 
 ## Tech stack
 
@@ -24,7 +26,7 @@ The web frontend for a video calling service that helps people communicate using
 | Web | Next.js 16, React 19, TypeScript |
 | Styling and state | Tailwind CSS 4, Zustand |
 | Networking | Axios, Socket.IO Client |
-| Media and recognition | WebRTC, mediasoup-client, MediaPipe Holistic, Web Audio API |
+| Media and recognition | WebRTC, mediasoup-client, MediaPipe Holistic, MediaRecorder API |
 
 ## Local setup
 
@@ -62,6 +64,7 @@ Open [localhost:3000](http://localhost:3000). Replace both backend URLs above wh
 | `NEXT_PUBLIC_WEBRTC_CONNECTION_MODE` | Defaults to `proxy`; use `direct` to connect to the BFF directly |
 | `NEXT_PUBLIC_WEBRTC_WS_URL` | Socket URL for `direct` mode, including `/calls` |
 | `NEXT_PUBLIC_WEBRTC_SOCKET_PATH` | Socket path for direct connections; defaults to `/socket.io` |
+| `NEXT_PUBLIC_STT_WS_URL` | Direct AI STT URL; defaults to `wss://gesture.ingyuc.click/cc_stt`, using binary MediaRecorder audio (WebM/Opus preferred), in 1-second chunks |
 
 - HTTPS pages use the `/api/v1` proxy for REST requests.
 - Direct socket connections require server-side Socket.IO CORS configuration. Use a secure endpoint for HTTPS pages.
@@ -85,6 +88,7 @@ Open [localhost:3000](http://localhost:3000). Replace both backend URLs above wh
 | `npm start` | Run the built application |
 | `npm run lint` | Run ESLint |
 | `npm run test:sfu` | Run SFU session and socket configuration regression tests |
+| `npm run test:stt` | Test STT binary streaming, recorder cleanup and response formats |
 
 ## Deployment and testing
 

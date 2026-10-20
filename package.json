@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:sfu": "node --test tests/sfuSession.test.mjs tests/callSocketOptions.test.mjs"
+    "test:sfu": "node --test tests/sfuSession.test.mjs tests/callSocketOptions.test.mjs",
+    "test:stt": "node --test tests/speechToText.test.mjs tests/speechCaptionRelay.test.mjs",
+    "test:sign": "node --test tests/signFrame.test.mjs"
   },
   "dependencies": {
     "@mediapipe/holistic": "^0.5.1675471629",

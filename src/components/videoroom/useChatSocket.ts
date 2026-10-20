@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { ChatMessage, Participant } from "./types";
+import { createSpeechCaptionReceiver, encodeSpeechCaption } from "./speechCaptionRelay";
 
 function getWsOrigin(): string {
   // HTTPS 환경: 같은 origin으로 연결 → Vercel rewrite가 socket.io를 백엔드로 프록시
@@ -20,11 +21,14 @@ function getWsOrigin(): string {
 export function useChatSocket(
   roomId: string,
   participants: Participant[],
-  onMessage: (msg: ChatMessage) => void
+  onMessage: (msg: ChatMessage) => void,
+  onSpeechCaption?: (name: string, text: string) => void
 ) {
   const socketRef = useRef<Socket | null>(null);
   const onMessageRef = useRef(onMessage);
   const participantsRef = useRef(participants);
+  const speechCaptionRef = useRef(onSpeechCaption);
+  useEffect(() => { speechCaptionRef.current = onSpeechCaption; }, [onSpeechCaption]);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
@@ -37,6 +41,7 @@ export function useChatSocket(
   useEffect(() => {
     if (!roomId) return;
     let disposed = false;
+    const receiveCaption = createSpeechCaptionReceiver();
 
     const token =
       typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
@@ -96,13 +101,21 @@ export function useChatSocket(
           (item) => item.userIdx === data.fromUserIdx
         );
         const fallbackId = data.fromUserIdx ? String(data.fromUserIdx) : data.user_id ?? "unknown";
+        const message = data.message ?? data.content ?? "";
+        if (typeof message !== "string") return;
+        const caption = receiveCaption(message, data.fromUserIdx ?? -1);
+        if (caption.handled) {
+          if (caption.text && Number.isInteger(data.fromUserIdx))
+            speechCaptionRef.current?.(participant?.name ?? `User ${fallbackId}`, caption.text);
+          return;
+        }
 
         onMessageRef.current({
           id: `${Date.now()}-${Math.random()}`,
           participantId: participant?.id ?? data.fromSocketId ?? fallbackId,
           name: participant?.name ?? `User ${fallbackId}`,
           username: participant?.username ?? fallbackId,
-          message: data.message ?? data.content ?? "",
+        message,
           time,
         });
       }
@@ -110,11 +123,8 @@ export function useChatSocket(
 
     return () => {
       disposed = true;
-      if (socket.connected) {
-        socket.disconnect();
-      } else {
-        socket.once("connect", () => socket.disconnect());
-      }
+      socket.removeAllListeners();
+      socket.disconnect();
       socketRef.current = null;
     };
   }, [roomId]);
@@ -130,5 +140,15 @@ export function useChatSocket(
     [roomId]
   );
 
-  return { sendMessage };
+  const sendSpeechCaption = useCallback((text: string) => {
+    const socket = socketRef.current;
+    // Never replay old captions after reconnecting or entering a different room.
+    if (!socket?.connected) return false;
+    for (const message of encodeSpeechCaption(text, crypto.randomUUID())) {
+      socket.emit("send_message", { roomType: "call", targetIdx: Number(roomId), message });
+    }
+    return true;
+  }, [roomId]);
+
+  return { sendMessage, sendSpeechCaption };
 }

@@ -355,7 +355,7 @@ export default function VideoRoom({
   }, [router, cleanupAudio]);
 
   // ── WebRTC ───────────────────────────────────────────────
-  const { remoteParticipants: receivedParticipants, sendFrame, sendAudio, connectionState, connectionError, leaveCall, retry } = useWebRTC({
+  const { remoteParticipants: receivedParticipants, sendFrame, connectionState, connectionError, leaveCall, retry } = useWebRTC({
     roomId,
     userId: user?.id ?? "",
     localVideoStream: cameraStream,
@@ -365,7 +365,6 @@ export default function VideoRoom({
     onSpeechCaption: showSpeechCaption,
   });
 
-  useSpeechToText(connectionState === "connected" ? micStream : null, sendAudio);
   const remoteParticipants = useRemoteSpeaking(receivedParticipants);
 
   // 원격 발화 상태는 수신 오디오에서 분석한다.
@@ -551,7 +550,13 @@ export default function VideoRoom({
     chatBubbleTimersRef.current.set(id, timer);
   }, []);
 
-  const { sendMessage: socketSendMessage } = useChatSocket(roomId, participants, handleReceiveMessage);
+  const { sendMessage: socketSendMessage, sendSpeechCaption } = useChatSocket(
+    roomId, participants, handleReceiveMessage, showSpeechCaption
+  );
+  useSpeechToText(connectionState === "connected" ? micStream : null, (text) => {
+    showSpeechCaption(user?.nickname ?? "나", text);
+    if (!sendSpeechCaption(text)) console.warn("[STT] 자막 공유 연결이 끊겨 상대방에게 전달하지 못했습니다.");
+  });
 
   // ── 방 정보 ──────────────────────────────────────────────
   const [currentRoomTitle, setCurrentRoomTitle] = useState(roomTitle);

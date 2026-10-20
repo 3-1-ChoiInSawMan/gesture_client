@@ -34,6 +34,17 @@ test('encoded chunks, reconnect, backpressure and shared track cleanup', () => {
   recorders[1].ondataavailable({data:chunk});
   assert.equal(closed,1);assert.equal(sent.length,2);
   assert.equal(recorders[1].state,'inactive');stopSecond();
+  socket.bufferedAmount=0;
+  let rotations=0;
+  const stopThird=startSttRecorder(stream,socket,()=>rotations++);
+  const third=recorders[2], deliver=third.ondataavailable;
+  for(let i=0;i<9;i++)deliver({data:chunk});
+  assert.equal(rotations,0);
+  deliver({data:chunk});
+  assert.equal(rotations,1);assert.equal(third.state,'inactive');
+  const count=sent.length;
+  deliver({data:chunk});
+  assert.equal(sent.length,count);stopThird();
  } finally { if(original===undefined)delete globalThis.MediaRecorder;else globalThis.MediaRecorder=original; }
 });
 test('plain and JSON transcripts ignore control messages',()=>{

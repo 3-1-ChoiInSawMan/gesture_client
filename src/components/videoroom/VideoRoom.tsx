@@ -129,7 +129,7 @@ export default function VideoRoom({
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isSubtitlesOn, setIsSubtitlesOn] = useState(false);
+  const [isTranslateOn, setIsTranslateOn] = useState(false);
 
   // ── 카메라 스트림 ──────────────────────────────────────────
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
@@ -550,10 +550,10 @@ export default function VideoRoom({
     chatBubbleTimersRef.current.set(id, timer);
   }, []);
 
-  const { sendMessage: socketSendMessage, sendSpeechCaption } = useChatSocket(
+  const { sendMessage: socketSendMessage, sendSpeechCaption, connectionError: chatConnectionError } = useChatSocket(
     roomId, participants, handleReceiveMessage, showSpeechCaption
   );
-  useSpeechToText(connectionState === "connected" ? micStream : null, (text) => {
+  useSpeechToText(isTranslateOn && isMicOn && connectionState === "connected" ? micStream : null, (text) => {
     showSpeechCaption(user?.nickname ?? "나", text);
     if (!sendSpeechCaption(text)) console.warn("[STT] 자막 공유 연결이 끊겨 상대방에게 전달하지 못했습니다.");
   });
@@ -778,6 +778,10 @@ export default function VideoRoom({
   }, [currentRoomTitle, meetingAttendees, meetingNotesDraft, roomId, user]);
 
   const handleSendMessage = useCallback((message: string) => {
+    if (!socketSendMessage(message)) {
+      toast.error("채팅이 연결되지 않았거나 메시지가 너무 깁니다. 잠시 후 다시 보내주세요.");
+      return false;
+    }
     const newMsg: ChatMessage = {
       id: Date.now().toString(),
       participantId: "me",
@@ -787,7 +791,7 @@ export default function VideoRoom({
       time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
     };
     setMessages((prev) => [...prev, newMsg]);
-    socketSendMessage(message);
+    return true;
   }, [user, socketSendMessage]);
 
   const handleEndCall = useCallback(async () => {
@@ -839,11 +843,10 @@ export default function VideoRoom({
   }, []);
 
   // ── MediaPipe 수어 인식 ───────────────────────────────────
-  // 카메라 ON이면 자막 토글 여부와 무관하게 MediaPipe 실행 + AI 프레임 전송
-  // 자막 토글은 오버레이 표시 여부만 제어
+  // 번역 버튼은 내 입력만 제어하며, 수신 자막은 항상 표시한다.
   const { isDetecting, isLoading: isMediaPipeLoading } = useSignLanguage(
     cameraStream,
-    isCameraOn,
+    isTranslateOn && isCameraOn && connectionState === "connected",
     sendFrame
   );
 
@@ -922,19 +925,19 @@ export default function VideoRoom({
           step={tutorialStep}
           isCameraOn={isCameraOn && !!cameraStream}
           isMicOn={isMicOn && !!micStream}
-          isSubtitlesOn={isSubtitlesOn}
+          isTranslateOn={isTranslateOn}
           onStart={() => setTutorialStep("camera")}
           onSkip={finishTutorial}
           onNext={advanceTutorial}
           onEnableCamera={() => setIsCameraOn(true)}
-          onEnableSubtitles={() => setIsSubtitlesOn(true)}
+          onEnableTranslate={() => setIsTranslateOn(true)}
           onPrepareSign={() => {
             setIsCameraOn(true);
-            setIsSubtitlesOn(true);
+            setIsTranslateOn(true);
           }}
           onPrepareSpeech={() => {
             setIsMicOn(true);
-            setIsSubtitlesOn(true);
+            setIsTranslateOn(true);
           }}
         />
       )}
@@ -990,7 +993,7 @@ export default function VideoRoom({
                 )}
 
                 {/* 자막 — 메인 비디오 우하단 */}
-                {isSubtitlesOn && captions.length > 0 && (
+                {captions.length > 0 && (
                   <div className="absolute bottom-10 right-4 flex flex-col gap-2 items-end pointer-events-none z-20 max-w-[78%]">
                     {captions.map((caption) => (
                       <p key={caption.id} className="text-white text-[20px] font-semibold bg-black/90 border border-white/15 px-5 py-3 rounded-[6px] leading-8 shadow-lg">
@@ -1002,7 +1005,7 @@ export default function VideoRoom({
                   </div>
                 )}
 
-                {isSubtitlesOn && speechCaptions.length > 0 && (
+                {speechCaptions.length > 0 && (
                   <div className="absolute top-12 right-4 flex flex-col gap-2 items-end pointer-events-none z-20 max-w-[78%]">
                     {speechCaptions.map((caption) => (
                       <p key={caption.id} className="text-white text-[20px] font-semibold bg-black/90 border border-white/15 px-5 py-3 rounded-[6px] leading-8 shadow-lg">
@@ -1031,13 +1034,12 @@ export default function VideoRoom({
                   </div>
                 )}
 
-                {isSubtitlesOn && (
                   <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
                     <div className="flex items-center gap-1 bg-[#724BFD]/80 text-white text-[10px] font-medium px-2 py-1 rounded-full">
                       <Captions size={12} />
-                      자막 ON
+                      {isTranslateOn ? "수어·음성 인식 ON" : "자막 수신 중"}
                     </div>
-                    {isCameraOn && (
+                    {isTranslateOn && isCameraOn && (
                       isMediaPipeLoading ? (
                         <div className="flex items-center gap-1 bg-black/50 text-white/60 text-[10px] font-medium px-2 py-1 rounded-full">
                           <span className="w-3 h-3 border border-white/40 border-t-white/80 rounded-full animate-spin" />
@@ -1053,7 +1055,6 @@ export default function VideoRoom({
                       )
                     )}
                   </div>
-                )}
               </div>
             </div>
           </div>
@@ -1062,6 +1063,7 @@ export default function VideoRoom({
             <ChatPanel
               roomTitle={currentRoomTitle}
               messages={messages}
+              connectionError={chatConnectionError}
               onClose={() => setActivePanel(null)}
               onSendMessage={handleSendMessage}
             />
@@ -1096,13 +1098,13 @@ export default function VideoRoom({
             isMicOn={isMicOn}
             isCameraOn={isCameraOn}
             isScreenSharing={isScreenSharing}
-            isSubtitlesOn={isSubtitlesOn}
+            isTranslateOn={isTranslateOn}
             activePanel={activePanel}
             someoneElseSharing={someoneElseSharing}
             onToggleMic={() => setIsMicOn((v) => !v)}
             onToggleCamera={() => setIsCameraOn((v) => !v)}
             onToggleScreenShare={handleToggleScreenShare}
-            onToggleSubtitles={() => setIsSubtitlesOn((v) => !v)}
+            onToggleTranslate={() => setIsTranslateOn((v) => !v)}
             onOpenChat={() => togglePanel("chat")}
             onOpenMeetingNotes={handleOpenMeetingNotes}
             onOpenQuickSlots={() => togglePanel("quick-slots")}

@@ -1,21 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { ChatMessage, Participant } from "./types";
 import { createSpeechCaptionReceiver, encodeSpeechCaption } from "./speechCaptionRelay";
+import { resolveChatSocketOptions } from "./callSocketOptions";
+import { getValidAccessToken, refreshAccessToken } from "@/api/axiosInstance";
 
 function getWsOrigin(): string {
-  // HTTPS 환경: 같은 origin으로 연결 → Vercel rewrite가 socket.io를 백엔드로 프록시
-  if (typeof window !== "undefined" && window.location.protocol === "https:") {
-    return window.location.origin;
-  }
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "";
-  try {
-    return new URL(base).origin;
-  } catch {
-    return base;
-  }
+  return window.location.origin;
 }
 
 export function useChatSocket(
@@ -25,6 +18,8 @@ export function useChatSocket(
   onSpeechCaption?: (name: string, text: string) => void
 ) {
   const socketRef = useRef<Socket | null>(null);
+  const readyRef = useRef(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const onMessageRef = useRef(onMessage);
   const participantsRef = useRef(participants);
   const speechCaptionRef = useRef(onSpeechCaption);
@@ -43,22 +38,26 @@ export function useChatSocket(
     let disposed = false;
     const receiveCaption = createSpeechCaptionReceiver();
 
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    const origin = getWsOrigin();
-
-    // HTTPS(Vercel) 환경: Vercel은 WebSocket 프록시 불가 → polling 트랜스포트 사용
-    // HTTP 로컬 개발: WebSocket 직접 연결
-    const transports =
-      typeof window !== "undefined" && window.location.protocol === "https:"
-        ? ["polling"]
-        : ["websocket"];
-
-    const socket = io(`${origin}/chat`, {
-      auth: { token: token ?? "" },
-      query: { token: token ?? "" },
-      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-      transports,
+    const options = resolveChatSocketOptions(getWsOrigin(), {
+      mode: process.env.NEXT_PUBLIC_WEBRTC_CONNECTION_MODE,
+      url: process.env.NEXT_PUBLIC_WEBRTC_WS_URL,
+      path: process.env.NEXT_PUBLIC_WEBRTC_SOCKET_PATH,
+    });
+    let joinTimer: ReturnType<typeof setTimeout>;
+    let retryTimer: ReturnType<typeof setTimeout>;
+    let retries = 0;
+    const socket = io(options.url, {
+      autoConnect: false,
+      forceNew: true,
+      path: options.path,
+      addTrailingSlash: options.addTrailingSlash,
+      transports: options.transports,
+      auth: (done) => {
+        void getValidAccessToken().then(token => {
+          if (!disposed && token) done({ token });
+          else if (!disposed) setConnectionError("채팅 연결에 로그인이 필요합니다.");
+        }).catch(() => { if (!disposed) setConnectionError("채팅 인증에 실패했습니다."); });
+      },
     });
 
     socketRef.current = socket;
@@ -68,7 +67,31 @@ export function useChatSocket(
         socket.disconnect();
         return;
       }
-      socket.emit("join_chat", { roomType: "call", targetIdx: Number(roomId) });
+      // This gateway has no readiness event/ACK; allow its async authentication to finish.
+      clearTimeout(joinTimer);
+      joinTimer = setTimeout(() => {
+        if (disposed || !socket.connected) return;
+        socket.emit("join_chat", { roomType: "call", targetIdx: Number(roomId) });
+        readyRef.current = true;
+        setConnectionError(null);
+      }, 300);
+    });
+    socket.on("connect_error", () => {
+      readyRef.current = false;
+      if (!disposed) setConnectionError("채팅·음성 자막 공유 연결을 재시도하고 있습니다.");
+    });
+    socket.on("ws_error", (error: { statusCode?: string; message?: string }) => {
+      readyRef.current = false;
+      if (!disposed) setConnectionError(error.message || "채팅 서버에서 요청을 거절했습니다.");
+      if (error.statusCode === "AUTH_002") void refreshAccessToken().catch(() => {});
+    });
+    socket.on("disconnect", (reason) => {
+      readyRef.current = false;
+      clearTimeout(joinTimer);
+      if (disposed) return;
+      setConnectionError("채팅 연결이 끊겨 메시지와 음성 자막을 공유할 수 없습니다.");
+      if (reason === "io server disconnect" && retries++ < 3)
+        retryTimer = setTimeout(() => { if (!disposed) socket.connect(); }, 1000 * retries);
     });
 
     socket.on(
@@ -84,8 +107,7 @@ export function useChatSocket(
         fromSocketId?: string;
         user_id?: string;
       }) => {
-        if (data.roomType && data.roomType !== "call") return;
-        if (data.targetIdx !== undefined && String(data.targetIdx) !== String(roomId)) return;
+        if (disposed || data.roomType !== "call" || String(data.targetIdx) !== String(roomId)) return;
 
         const createdAt = data.created_at ?? data.createdAt;
         const time = createdAt
@@ -115,14 +137,18 @@ export function useChatSocket(
           participantId: participant?.id ?? data.fromSocketId ?? fallbackId,
           name: participant?.name ?? `User ${fallbackId}`,
           username: participant?.username ?? fallbackId,
-        message,
+          message,
           time,
         });
       }
     );
 
+    socket.connect();
     return () => {
       disposed = true;
+      readyRef.current = false;
+      clearTimeout(joinTimer);
+      clearTimeout(retryTimer);
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
@@ -131,11 +157,13 @@ export function useChatSocket(
 
   const sendMessage = useCallback(
     (message: string) => {
-      socketRef.current?.emit("send_message", {
+      if (!socketRef.current?.connected || !readyRef.current || message.length > 1000) return false;
+      socketRef.current.emit("send_message", {
         roomType: "call",
         targetIdx: Number(roomId),
         message,
       });
+      return true;
     },
     [roomId]
   );
@@ -143,12 +171,12 @@ export function useChatSocket(
   const sendSpeechCaption = useCallback((text: string) => {
     const socket = socketRef.current;
     // Never replay old captions after reconnecting or entering a different room.
-    if (!socket?.connected) return false;
+    if (!socket?.connected || !readyRef.current) return false;
     for (const message of encodeSpeechCaption(text, crypto.randomUUID())) {
       socket.emit("send_message", { roomType: "call", targetIdx: Number(roomId), message });
     }
     return true;
   }, [roomId]);
 
-  return { sendMessage, sendSpeechCaption };
+  return { sendMessage, sendSpeechCaption, connectionError };
 }

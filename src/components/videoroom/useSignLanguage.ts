@@ -1,18 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createSignFrame, captionDebug, type SignResults } from "./signFrame";
 
-type Landmark = { x: number; y: number; z: number; visibility?: number };
 
-/** 손 미감지 시 채울 플레이스홀더 (21 랜드마크 × 2 = 42개) */
-const MISSING_HAND = new Array(42).fill(0);
 /** 한 번에 전송할 프레임 수 */
 const FRAME_BUFFER_SIZE = 30;
 
-function flattenHand(lms?: Landmark[]): number[] {
-  if (!lms || lms.length === 0) return MISSING_HAND;
-  return lms.flatMap((lm) => [1 - lm.x, lm.y]);
-}
 
 const MEDIAPIPE_VERSION = "0.5.1675471629";
 
@@ -24,7 +18,7 @@ export function useSignLanguage(
   const [isDetecting, setIsDetecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const holisticRef = useRef<{ send: (i: { image: HTMLVideoElement }) => Promise<void>; onResults: (cb: (r: any) => void) => void; setOptions: (o: object) => void; initialize?: () => Promise<void>; close?: () => void } | null>(null);
+  const holisticRef = useRef<{ send: (i: { image: HTMLVideoElement }) => Promise<void>; close?: () => void } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const keypointBufferRef = useRef<number[][]>([]);
   const rafRef = useRef<number | null>(null);
@@ -36,6 +30,9 @@ export function useSignLanguage(
     if (!enabled || !stream) return;
 
     let destroyed = false;
+    let previousBatchAt: number | undefined;
+    let batchStartedAt: number | undefined;
+    let lastVideoTime = -1;
 
     const init = async () => {
       const { Holistic } = await import("@mediapipe/holistic");
@@ -73,11 +70,8 @@ export function useSignLanguage(
         minTrackingConfidence: 0.5,
       });
 
-      holistic.onResults((results: {
-        leftHandLandmarks?: Landmark[];
-        rightHandLandmarks?: Landmark[];
-        poseLandmarks?: Landmark[];
-      }) => {
+      holistic.onResults((results: SignResults) => {
+        if (destroyed) return;
         processingRef.current = false;
 
         const handDetected =
@@ -85,18 +79,21 @@ export function useSignLanguage(
           (results.rightHandLandmarks?.length ?? 0) > 0;
         setIsDetecting(handDetected);
 
-        const pose = results.poseLandmarks;
-        const frameKP: number[] = [
-          ...flattenHand(results.leftHandLandmarks),
-          ...flattenHand(results.rightHandLandmarks),
-          ...(pose
-            ? [1 - pose[11].x, pose[11].y, 1 - pose[12].x, pose[12].y]
-            : [0, 0, 0, 0]),
-        ];
+        const frameKP = createSignFrame(results);
+        const now = performance.now();
+        batchStartedAt ??= now;
         keypointBufferRef.current.push(frameKP);
 
         if (keypointBufferRef.current.length >= FRAME_BUFFER_SIZE) {
           const batch = keypointBufferRef.current.splice(0, FRAME_BUFFER_SIZE);
+          captionDebug("sign_batch", {
+            atMs: now,
+            frames: batch.length,
+            intervalMs: previousBatchAt === undefined ? null : now - previousBatchAt,
+            captureSpanMs: now - batchStartedAt,
+          });
+          previousBatchAt = now;
+          batchStartedAt = undefined;
           onBatchRef.current?.(batch);
         }
       });
@@ -114,16 +111,23 @@ export function useSignLanguage(
       setIsLoading(false);
 
       const tick = async () => {
+        if (destroyed) return;
         if (
           !processingRef.current &&
           videoRef.current &&
           holisticRef.current &&
-          !videoRef.current.paused
+          !videoRef.current.paused && videoRef.current.readyState >= 2 &&
+          videoRef.current.currentTime !== lastVideoTime
         ) {
           processingRef.current = true;
-          await holisticRef.current.send({ image: videoRef.current });
+          lastVideoTime = videoRef.current.currentTime;
+          try {
+            await holisticRef.current.send({ image: videoRef.current });
+          } catch {
+            captionDebug("detector_error", { atMs: performance.now() });
+          } finally { processingRef.current = false; }
         }
-        rafRef.current = requestAnimationFrame(tick);
+        if (!destroyed) rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
     };

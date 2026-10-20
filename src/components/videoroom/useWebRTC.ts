@@ -202,13 +202,20 @@ export function useWebRTC(params: Params) {
   }, [localVideoStream, localAudioStream, screenStream]);
 
   const sendAi = useCallback(async (source: "frame" | "audio", content: number[][] | ArrayBuffer) => {
+    const startedAt = performance.now();
+    const debug = (status: string) => {
+      if (window.localStorage.getItem("gesture:caption-debug") === "1")
+        console.debug("[Caption] ai_request", { source, status, atMs: startedAt, elapsedMs: performance.now() - startedAt });
+    };
     const session = sessionRef.current;
-    if (!session) return;
+    if (!session) { debug("skipped_no_session"); return; }
     try {
       const accepted = await session.sendAi(source, content);
+      debug(accepted === null ? "skipped_pending_or_not_ready" : accepted ? "accepted" : "rejected");
       if (sessionRef.current === session && accepted !== null)
         setAiError(accepted ? null : "현재 자막을 처리하지 못하고 있습니다. 잠시 후 다시 시도해 주세요.");
     } catch (error) {
+      debug("error");
       if (sessionRef.current === session) setAiError(error instanceof Error ? error.message : "자막 요청 실패");
     }
   }, []);

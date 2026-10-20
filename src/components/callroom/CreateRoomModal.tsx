@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Minus, Plus, X } from "lucide-react";
-import Image from "next/image";
+import { Minus, Plus } from "lucide-react";
 import { toast } from "react-toastify";
 import { callRoomApi } from "@/api/callRoomApi";
-import { useCallRoomStore } from "@/store/callRoomStore";
 
 const CATEGORY_MAP = {
   "일반": "BASIC",
@@ -22,75 +20,11 @@ export interface CreateRoomFormData {
   visibility: "공개" | "비공개";
   roomType: RoomType;
   maxParticipants: number;
-  thumbnailFile?: File;
 }
 
 interface CreateRoomModalProps {
   onClose: () => void;
   onSubmit?: (data: CreateRoomFormData) => void;
-}
-
-function ImageUploadArea({
-  preview,
-  isDragging,
-  onDrop,
-  onDragOver,
-  onDragLeave,
-  onAreaClick,
-  onFileChange,
-  onClearPreview,
-  fileInputRef,
-}: {
-  preview: string | null;
-  isDragging: boolean;
-  onDrop: (e: React.DragEvent) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: () => void;
-  onAreaClick: () => void;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onClearPreview: (e: React.MouseEvent) => void;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-}) {
-  return (
-    <div
-      className={`w-full h-[160px] rounded-[15px] border-2 border-dashed bg-[#F3F4F6] flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors ${
-        isDragging ? "border-[#724BFD] bg-purple-50" : "border-[#E6E9EE]"
-      }`}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onClick={onAreaClick}
-    >
-      {preview ? (
-        <div className="relative w-full h-full rounded-[13px] overflow-hidden">
-          <Image src={preview} alt="썸네일 미리보기" fill className="object-cover" unoptimized />
-          <button
-            className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1 hover:bg-black/70 transition-colors"
-            onClick={onClearPreview}
-            aria-label="이미지 제거"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="w-[48px] h-[48px] bg-white border border-[#E6E9EE] rounded-full flex items-center justify-center">
-            <Upload size={20} className="text-[#724BFD]" strokeWidth={2} />
-          </div>
-          <p className="text-[12px] font-semibold text-[#333] tracking-tight select-none">
-            이미지를 드래그하여 업로드
-          </p>
-          <div
-            className="bg-white border border-[#E6E9EE] rounded-[5px] px-[14px] py-[7px] text-[12px] font-semibold text-[#333] hover:bg-gray-50 transition-colors"
-            onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-          >
-            파일선택
-          </div>
-        </>
-      )}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-    </div>
-  );
 }
 
 function VisibilityToggle({ value, onChange }: { value: "공개" | "비공개"; onChange: (v: "공개" | "비공개") => void }) {
@@ -152,7 +86,6 @@ function ParticipantCounter({ value, onDecrease, onIncrease }: { value: number; 
 }
 
 export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalProps) {
-  const { fetchRooms } = useCallRoomStore();
   const router = useRouter();
   const [roomName, setRoomName] = useState("");
   const [description, setDescription] = useState("");
@@ -162,11 +95,6 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
   const [pwDigits, setPwDigits] = useState(["", "", "", ""]);
   const pwRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const handlePwChange = (i: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
     const next = [...pwDigits];
@@ -186,27 +114,6 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  const handleFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    setThumbnailFile(file);
-    setThumbnailPreview(URL.createObjectURL(file));
-  }, []);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
-
-  const toBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
   const handleSubmit = async () => {
     if (!roomName.trim()) {
       toast.error("방 이름을 입력해주세요.");
@@ -223,11 +130,6 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
 
     setSubmitting(true);
     try {
-      let thumbnailUrl: string | undefined;
-      if (thumbnailFile) {
-        thumbnailUrl = await toBase64(thumbnailFile);
-      }
-
       const result = await callRoomApi.createRoom({
         title: roomName,
         description: description.trim(),
@@ -235,11 +137,10 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
         isPublic: visibility === "공개",
         category: CATEGORY_MAP[roomType],
         ...(visibility === "비공개" ? { password: pwDigits.join("") } : {}),
-        ...(thumbnailUrl ? { thumbnailUrl } : {}),
       });
 
       toast.success("방이 생성되었습니다.");
-      onSubmit?.({ roomName, description, visibility, roomType, maxParticipants, thumbnailFile: thumbnailFile ?? undefined });
+      onSubmit?.({ roomName, description, visibility, roomType, maxParticipants });
       onClose();
 
       const roomId = result.roomId ?? result.roomIdx;
@@ -269,19 +170,6 @@ export default function CreateRoomModal({ onClose, onSubmit }: CreateRoomModalPr
             통화방 생성하기
           </h2>
 
-          <ImageUploadArea
-            preview={thumbnailPreview}
-            isDragging={isDragging}
-            onDrop={handleDrop}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onAreaClick={() => fileInputRef.current?.click()}
-            onFileChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-            onClearPreview={(e) => { e.stopPropagation(); setThumbnailPreview(null); setThumbnailFile(null); }}
-            fileInputRef={fileInputRef}
-          />
-
-          {/* 방 이름 */}
           <div className="flex flex-col gap-2">
             <label className="text-[13px] font-semibold text-[#333]">
               방 이름 <span className="text-[#F85858]">*</span>

@@ -246,3 +246,12 @@ test("AI requests do not buffer through disconnect and respect ACK backpressure"
   assert.equal(await s.session.sendAi("audio", new ArrayBuffer(4)), null);
   assert.equal(s.requests.filter((request) => request.event === "send_audio").length, 1);
 });
+
+test('frame batch is skipped while the previous frame ACK is pending',async()=>{
+ const s=setup();await s.session.start();let ack;
+ s.overrides.set('send_frame',(_p,cb)=>{ack=cb;});
+ const first=s.session.sendAi('frame',Array.from({length:30},()=>Array(88).fill(0)));
+ assert.equal(await s.session.sendAi('frame',Array.from({length:30},()=>Array(88).fill(1))),null);
+ assert.equal(s.requests.filter(r=>r.event==='send_frame').length,1);
+ ack({ok:true,data:{accepted:true}});assert.equal(await first,true);s.session.close();
+});

@@ -8,12 +8,12 @@ interface VideoRoomTutorialProps {
   step: TutorialStep;
   isCameraOn: boolean;
   isMicOn: boolean;
-  isSubtitlesOn: boolean;
+  isTranslateOn: boolean;
   onStart: () => void;
   onSkip: () => void;
   onNext: () => void;
   onEnableCamera: () => void;
-  onEnableSubtitles: () => void;
+  onEnableTranslate: () => void;
   onPrepareSign: () => void;
   onPrepareSpeech: () => void;
 }
@@ -24,12 +24,12 @@ export default function VideoRoomTutorial({
   step,
   isCameraOn,
   isMicOn,
-  isSubtitlesOn,
+  isTranslateOn,
   onStart,
   onSkip,
   onNext,
   onEnableCamera,
-  onEnableSubtitles,
+  onEnableTranslate,
   onPrepareSign,
   onPrepareSpeech,
 }: VideoRoomTutorialProps) {
@@ -50,7 +50,7 @@ export default function VideoRoomTutorial({
           </div>
           <h2 className="text-[24px] font-bold">통화방 사용법을 확인할까요?</h2>
           <p className="mt-3 text-[16px] leading-7 text-white/70">
-            카메라와 자막을 켜고 수어·음성 자막을 사용하는 방법을 직접 확인합니다.
+            번역을 켜면 내 수어·음성 인식을 시작합니다. 다른 참가자의 자막은 항상 보입니다.
           </p>
           <div className="mt-7 flex justify-end gap-2">
             <button
@@ -85,17 +85,17 @@ export default function VideoRoomTutorial({
     },
     captions: {
       icon: <Captions size={24} />,
-      title: "자막을 켜보세요",
-      description: "자막을 켜면 수어 번역과 음성 인식 결과를 화면에서 볼 수 있습니다.",
-      ready: isSubtitlesOn,
-      action: onEnableSubtitles,
-      actionLabel: "자막 켜기",
+      title: "수어·음성 번역을 켜보세요",
+      description: "내 카메라와 마이크로 인식을 시작합니다. 결과는 같은 방의 모두에게 자막으로 표시됩니다.",
+      ready: isTranslateOn,
+      action: onEnableTranslate,
+      actionLabel: "수어·음성 번역 켜기",
     },
     sign: {
       icon: <Hand size={24} />,
       title: "이제 수어를 해보세요",
       description: "카메라 안에 얼굴과 양손이 보이도록 수어하면 번역 자막이 화면 오른쪽 아래에 표시됩니다.",
-      ready: isCameraOn && isSubtitlesOn,
+      ready: isCameraOn && isTranslateOn,
       action: onPrepareSign,
       actionLabel: "수어 자막 준비하기",
     },
@@ -103,7 +103,7 @@ export default function VideoRoomTutorial({
       icon: <Mic size={24} />,
       title: "말하면 음성 자막이 나옵니다",
       description: "마이크를 켜고 말하면 STT 자막이 발화자 이름과 함께 화면 오른쪽 위에 표시됩니다.",
-      ready: isMicOn && isSubtitlesOn,
+      ready: isMicOn && isTranslateOn,
       action: onPrepareSpeech,
       actionLabel: "음성 자막 준비하기",
     },

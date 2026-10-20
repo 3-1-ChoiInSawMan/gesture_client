@@ -18,13 +18,13 @@ interface VideoControlsProps {
   isMicOn: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
-  isSubtitlesOn: boolean;
+  isTranslateOn: boolean;
   activePanel: string | null;
   someoneElseSharing?: boolean;
   onToggleMic: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
-  onToggleSubtitles: () => void;
+  onToggleTranslate: () => void;
   onOpenChat: () => void;
   onOpenMeetingNotes: () => void;
   onOpenQuickSlots: () => void;
@@ -87,13 +87,13 @@ export default function VideoControls({
   isMicOn,
   isCameraOn,
   isScreenSharing,
-  isSubtitlesOn,
+  isTranslateOn,
   activePanel,
   someoneElseSharing,
   onToggleMic,
   onToggleCamera,
   onToggleScreenShare,
-  onToggleSubtitles,
+  onToggleTranslate,
   onOpenChat,
   onOpenMeetingNotes,
   onOpenQuickSlots,
@@ -128,9 +128,9 @@ export default function VideoControls({
         />
         <ControlButton
           icon={<Captions size={22} />}
-          label="자막"
-          onClick={onToggleSubtitles}
-          active={isSubtitlesOn}
+          label="수어·음성 번역"
+          onClick={onToggleTranslate}
+          active={isTranslateOn}
         />
         <ControlButton
           icon={<MessageSquare size={22} />}

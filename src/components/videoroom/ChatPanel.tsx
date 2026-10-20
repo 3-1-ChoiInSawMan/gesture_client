@@ -8,7 +8,8 @@ interface ChatPanelProps {
   roomTitle: string;
   messages: ChatMessage[];
   onClose: () => void;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string) => boolean;
+  connectionError?: string | null;
 }
 
 export default function ChatPanel({
@@ -16,6 +17,7 @@ export default function ChatPanel({
   messages,
   onClose,
   onSendMessage,
+  connectionError,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -26,12 +28,11 @@ export default function ChatPanel({
 
   const handleSend = () => {
     if (!input.trim()) return;
-    onSendMessage(input.trim());
-    setInput("");
+    if (onSendMessage(input.trim())) setInput("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -65,18 +66,21 @@ export default function ChatPanel({
       </div>
 
       {/* 메시지 목록 */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-4">
-        {messages.map((msg) => (
-          <div key={msg.id} className="flex gap-2">
+      {connectionError && <p role="status" className="px-4 py-2 text-xs text-red-600">{connectionError}</p>}
+      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1">
+        {messages.map((msg, index) => {
+          const startsGroup = index === 0 || messages[index - 1].participantId !== msg.participantId;
+          return (
+          <div key={msg.id} className={`flex gap-2 ${startsGroup && index > 0 ? "mt-3" : ""}`}>
             {/* 아바타 */}
-            <div className="w-8 h-8 rounded-full bg-[#724BFD]/20 flex items-center justify-center shrink-0 mt-0.5">
+            <div className={`w-8 h-8 rounded-full bg-[#724BFD]/20 flex items-center justify-center shrink-0 mt-0.5 ${startsGroup ? "" : "invisible"}`}>
               <span className="text-[12px] font-semibold text-[#724BFD]">
                 {msg.name[0]}
               </span>
             </div>
             {/* 메시지 */}
             <div className="flex flex-col gap-0.5 min-w-0">
-              <div className="flex items-center gap-2">
+              {startsGroup && <div className="flex items-center gap-2">
                 <span className="text-[12px] font-semibold text-[#333] truncate">
                   {msg.name}
                 </span>
@@ -86,13 +90,13 @@ export default function ChatPanel({
                 <span className="text-[10px] text-[#AAAAAA] shrink-0 ml-auto">
                   {msg.time}
                 </span>
-              </div>
+              </div>}
               <p className="text-[12px] text-[#555555] break-words leading-relaxed">
                 {msg.message}
               </p>
             </div>
           </div>
-        ))}
+        ); })}
         <div ref={bottomRef} />
       </div>
 
@@ -101,6 +105,7 @@ export default function ChatPanel({
         <div className="flex items-center gap-2 border border-[rgba(51,51,51,0.2)] rounded-[12px] px-3 py-2">
           <input
             type="text"
+            maxLength={1000}
             placeholder="메시지 입력"
             value={input}
             onChange={(e) => setInput(e.target.value)}

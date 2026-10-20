@@ -1,6 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveCallSocketOptions } from "../src/components/videoroom/callSocketOptions.ts";
+import { resolveCallSocketOptions, resolveChatSocketOptions } from "../src/components/videoroom/callSocketOptions.ts";
+
+test("chat shares the call proxy without polling POST redirects", () => {
+  for (const origin of ["http://localhost:3000", "https://gesture.example"]) {
+    assert.deepEqual(resolveChatSocketOptions(origin), {
+      url: `${origin}/chat`, path: "/socket.io", transports: ["polling"], addTrailingSlash: false,
+    });
+  }
+});
+test("direct chat uses the configured server with the chat namespace", () => {
+  assert.deepEqual(resolveChatSocketOptions("https://gesture.example", {
+    mode: "direct", url: "https://api.example/calls", path: "/custom",
+  }), {
+    url: "https://api.example/chat", path: "/custom", transports: ["polling", "websocket"], addTrailingSlash: true,
+  });
+});
 
 test("local calls use the proxy even when the old remote URL remains configured", () => {
   assert.deepEqual(resolveCallSocketOptions("http://localhost:3000", {
